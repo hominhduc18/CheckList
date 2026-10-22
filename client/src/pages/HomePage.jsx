@@ -320,7 +320,9 @@ export default function HomePage() {
                   🏥
                 </div>
                 <div className="room-card-info">
-                  <span className="room-dept-name">{r.department_name}</span>
+                  {r.department_name && r.department_name !== r.name && (
+                    <span className="room-dept-name">{r.department_name}</span>
+                  )}
                   <strong className="room-title">{r.name}</strong>
                 </div>
               </Link>

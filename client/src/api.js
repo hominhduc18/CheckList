@@ -43,8 +43,8 @@ async function safeFetchJson(path, options = {}) {
 
 /* ================== DỮ LIỆU DEMO MẪU BỆNH VIỆN (KHI CHƯA CÓ BACKEND) ================== */
 const MOCK_ROOMS = [
-  { id: 1, name: 'Phòng khám 01', qr_code: 'PK01-KB-DEMO', department_id: 1, department_name: 'Khoa Khám bệnh' },
-  { id: 2, name: 'Phòng Cấp cứu A1', qr_code: 'CC01-CC-DEMO', department_id: 2, department_name: 'Khoa Cấp cứu' },
+  { id: 1, name: 'Khoa Khám bệnh', qr_code: 'KHOA-KB', department_id: 1, department_name: 'Khoa Khám bệnh' },
+  { id: 2, name: 'Khoa Cấp cứu', qr_code: 'CC01-CC-DEMO', department_id: 2, department_name: 'Khoa Cấp cứu' },
   { id: 3, name: 'Phòng Siêu âm 02', qr_code: 'SA02-CDHA-DEMO', department_id: 3, department_name: 'Khoa Chẩn đoán hình ảnh' },
   { id: 4, name: 'Phòng Tiêm chủng', qr_code: 'TC01-KB-DEMO', department_id: 1, department_name: 'Khoa Khám bệnh' },
   { id: 5, name: 'Phòng Tiểu phẫu', qr_code: 'TP01-NGOAI-DEMO', department_id: 4, department_name: 'Khoa Ngoại' },
@@ -169,7 +169,7 @@ export async function getRoomTodayStatus(qrCode) {
   } catch {
     const local = getLocalSubmissions();
     const roomSubmissions = local.filter(
-      (s) => s.room_qr === qrCode || s.room_name?.includes('Phòng khám 01')
+      (s) => s.room_qr === qrCode || s.room_name?.includes('Khoa Khám bệnh')
     );
     return { submissions: roomSubmissions };
   }

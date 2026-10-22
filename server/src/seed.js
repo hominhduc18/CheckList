@@ -38,7 +38,7 @@ const insertItem = db.prepare(
 const run = db.transaction(() => {
   const deptId = insertDept.run('Khoa Khám bệnh').lastInsertRowid;
   const qrCode = nanoid(16);
-  const roomId = insertRoom.run(deptId, 'Phòng khám 01', qrCode).lastInsertRowid;
+  const roomId = insertRoom.run(deptId, 'Khoa Khám bệnh', qrCode).lastInsertRowid;
 
   const tplId = insertTpl.run(roomId, 'Bảng kiểm Vệ sinh & Buồng phòng', 'ca_ngay', 1, 0).lastInsertRowid;
 
@@ -68,7 +68,7 @@ const run = db.transaction(() => {
 
 const { qrCode } = run();
 console.log('Seed OK.');
-console.log('Khoa: Khoa Khám bệnh | Phòng: Phòng khám 01');
+console.log('Khoa: Khoa Khám bệnh | Tên kiểm tra: Khoa Khám bệnh');
 console.log(`Mã phòng (QR): ${qrCode}`);
 console.log(`Form: http://localhost:5173/r/${qrCode}`);
 console.log('Admin: admin@bv.local / Admin@123');

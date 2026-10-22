@@ -201,7 +201,7 @@ export function initSchema() {
     if (deptCount === 0) {
       const deptId = db.prepare('INSERT INTO departments (name) VALUES (?)').run('Khoa Khám bệnh').lastInsertRowid;
       const qrCode = nanoid(16);
-      db.prepare('INSERT INTO rooms (department_id, name, qr_code) VALUES (?, ?, ?)').run(deptId, 'Phòng khám 01', qrCode);
+      db.prepare('INSERT INTO rooms (department_id, name, qr_code) VALUES (?, ?, ?)').run(deptId, 'Khoa Khám bệnh', qrCode);
 
       db.prepare(
         `INSERT INTO managers (email, password_hash, full_name, role, department_ids)
@@ -253,8 +253,8 @@ export function initSchema() {
       }
     }
 
-    // Đổi tên phòng 'Lấy máu, điện tim' thành 'Phòng khám 01'
-    db.prepare(`UPDATE rooms SET name = 'Phòng khám 01' WHERE name = 'Lấy máu, điện tim'`).run();
+    // Đổi tên phòng 'Lấy máu, điện tim' hoặc 'Phòng khám 01' thành 'Khoa Khám bệnh'
+    db.prepare(`UPDATE rooms SET name = 'Khoa Khám bệnh' WHERE name IN ('Lấy máu, điện tim', 'Phòng khám 01')`).run();
     db.prepare(`UPDATE template_items SET content = replace(content, 'bàn lấy máu, ', 'bàn khám, ') WHERE content LIKE '%bàn lấy máu%'`).run();
     db.prepare(`UPDATE template_items SET content = replace(content, 'xe điện tim, ', '') WHERE content LIKE '%xe điện tim%'`).run();
     db.prepare(`UPDATE template_items SET content = replace(content, 'lấy máu', 'khám / thủ thuật') WHERE content LIKE '%lấy máu%'`).run();
