@@ -274,19 +274,47 @@ router.post('/submissions', upload.single('photo'), (req, res) => {
       .get(roomId);
     if (!room) return res.status(404).json({ error: 'Phòng không hợp lệ.' });
 
-    const tpl = db
+    let tpl = db
       .prepare(
         `SELECT * FROM templates WHERE id = ? AND room_id = ? AND is_visible = 1`
       )
       .get(templateId, roomId);
-    if (!tpl) return res.status(404).json({ error: 'Mẫu checklist không hợp lệ.' });
+    if (!tpl) {
+      tpl = db.prepare(`SELECT * FROM templates WHERE id = ? AND is_visible = 1`).get(templateId);
+    }
+    if (!tpl) {
+      tpl = db.prepare(`SELECT * FROM templates WHERE room_id = ? AND is_visible = 1 ORDER BY sort_order ASC LIMIT 1`).get(roomId);
+    }
+    if (!tpl) {
+      const ins = db
+        .prepare(`INSERT INTO templates (room_id, name, shift, allow_photo, sort_order) VALUES (?, ?, 'ca_ngay', 1, 0)`)
+        .run(roomId, body.template_name || 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY PHÒNG LẤY MÁU, ĐIỆN TIM');
+      tpl = { id: ins.lastInsertRowid, name: body.template_name || 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY PHÒNG LẤY MÁU, ĐIỆN TIM', shift: 'ca_ngay' };
+    }
 
-    const items = db
+    let items = db
       .prepare(
-        `SELECT id, content, sort_order FROM template_items
-         WHERE template_id = ? ORDER BY sort_order, id`
+        `SELECT id, content, sort_order FROM template_items WHERE template_id = ? ORDER BY sort_order, id`
       )
-      .all(templateId);
+      .all(tpl.id);
+
+    if (items.length === 0) {
+      const exactItems = [
+        'Vệ sinh bàn lấy máu, giường, phòng',
+        'Vệ sinh máy, xe điện tim, máy tính',
+        'Kiểm tra đầy đủ dụng cụ phòng',
+        'Thay khay dụng cụ lấy máu',
+        'Cồn xịt sát khuẩn',
+        'Sắp xếp phòng gọn gàng, sạch sẽ',
+      ];
+      const insItm = db.prepare(`INSERT INTO template_items (template_id, content, sort_order) VALUES (?, ?, ?)`);
+      exactItems.forEach((c, idx) => insItm.run(tpl.id, c, idx));
+      items = db
+        .prepare(
+          `SELECT id, content, sort_order FROM template_items WHERE template_id = ? ORDER BY sort_order, id`
+        )
+        .all(tpl.id);
+    }
 
     let ticks = {};
     try {
@@ -426,21 +454,58 @@ router.post('/submissions/batch', upload.single('photo'), (req, res) => {
         const templateId = Number(item.template_id);
         const isSupplement = item.is_supplement === true || item.is_supplement === '1';
 
-        const tpl = db
+        let tpl = db
           .prepare(`SELECT * FROM templates WHERE id = ? AND room_id = ? AND is_visible = 1`)
           .get(templateId, roomId);
-        if (!tpl) continue;
 
-        const tplItems = db
+        if (!tpl) {
+          tpl = db.prepare(`SELECT * FROM templates WHERE id = ? AND is_visible = 1`).get(templateId);
+        }
+        if (!tpl && item.template_name) {
+          tpl = db.prepare(`SELECT * FROM templates WHERE name = ? AND is_visible = 1 LIMIT 1`).get(item.template_name);
+        }
+        if (!tpl) {
+          tpl = db.prepare(`SELECT * FROM templates WHERE room_id = ? AND is_visible = 1 ORDER BY sort_order ASC LIMIT 1`).get(roomId);
+        }
+        if (!tpl) {
+          const ins = db
+            .prepare(`INSERT INTO templates (room_id, name, shift, allow_photo, sort_order) VALUES (?, ?, 'ca_ngay', 1, 0)`)
+            .run(roomId, item.template_name || 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY PHÒNG LẤY MÁU, ĐIỆN TIM');
+          tpl = {
+            id: ins.lastInsertRowid,
+            name: item.template_name || 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY PHÒNG LẤY MÁU, ĐIỆN TIM',
+            shift: 'ca_ngay',
+          };
+        }
+
+        let tplItems = db
           .prepare(
             `SELECT id, content, sort_order FROM template_items WHERE template_id = ? ORDER BY sort_order, id`
           )
-          .all(templateId);
+          .all(tpl.id);
+
+        if (tplItems.length === 0) {
+          const exactItems = [
+            'Vệ sinh bàn lấy máu, giường, phòng',
+            'Vệ sinh máy, xe điện tim, máy tính',
+            'Kiểm tra đầy đủ dụng cụ phòng',
+            'Thay khay dụng cụ lấy máu',
+            'Cồn xịt sát khuẩn',
+            'Sắp xếp phòng gọn gàng, sạch sẽ',
+          ];
+          const insItm = db.prepare(`INSERT INTO template_items (template_id, content, sort_order) VALUES (?, ?, ?)`);
+          exactItems.forEach((c, idx) => insItm.run(tpl.id, c, idx));
+          tplItems = db
+            .prepare(
+              `SELECT id, content, sort_order FROM template_items WHERE template_id = ? ORDER BY sort_order, id`
+            )
+            .all(tpl.id);
+        }
 
         const ticks = item.tick_results || {};
         const cleanTicks = {};
         for (const it of tplItems) {
-          cleanTicks[String(it.id)] = ticks[String(it.id)] === true;
+          cleanTicks[String(it.id)] = ticks[String(it.id)] !== undefined ? !!ticks[String(it.id)] : true;
         }
 
         const missing = tplItems.filter((it) => !cleanTicks[String(it.id)]);

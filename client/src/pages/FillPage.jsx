@@ -13,7 +13,6 @@ import {
 } from '../api.js';
 import { enqueueOffline, flushOfflineQueue, listOffline } from '../offline.js';
 import BrandHeader from '../BrandHeader.jsx';
-import PaperChecklistTable from '../components/PaperChecklistTable.jsx';
 import { exportSingleSubmissionExcel } from '../exportExcel.js';
 
 function compressImage(file, maxBytes = 5 * 1024 * 1024) {
@@ -445,6 +444,24 @@ export default function FillPage() {
       const res = await submitBatchChecklist(fd);
       rememberName(trimmedName);
 
+      const submittedTemplates = activeTemplates.map((tpl) => {
+        const tplTicks = ticksByTemplate[tpl.id] || {};
+        const done = tpl.items.filter((it) => tplTicks[String(it.id)]).length;
+        return {
+          id: tpl.id,
+          template_id: tpl.id,
+          template_name: tpl.name,
+          done_count: done,
+          total_count: tpl.items.length,
+          is_complete: done === tpl.items.length,
+          items: tpl.items.map((it) => ({
+            id: it.id,
+            content: it.content,
+            passed: !!tplTicks[String(it.id)],
+          })),
+        };
+      });
+
       const fullResult = {
         offline: false,
         room_name: data.room.name,
@@ -455,25 +472,27 @@ export default function FillPage() {
         time_display: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
         note: note.trim(),
         photoPreview,
-        templates: res.submissions || [],
+        templates: submittedTemplates,
       };
 
-      // Lưu tóm tắt vào lịch sử cục bộ
-      saveLocalSubmission({
-        id: res.submissions?.[0]?.id || Date.now(),
-        room_name: data.room.name,
-        department_name: data.room.department_name,
-        template_name: activeTemplates[0]?.name || 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY PHÒNG LẤY MÁU, ĐIỆN TIM',
-        qr_code: qrCode,
-        performer_name: trimmedName,
-        work_date: new Date().toISOString().slice(0, 10),
-        server_time: new Date().toISOString(),
-        date_display: fullResult.date_display,
-        time_display: fullResult.time_display,
-        is_complete: missingItemsCount === 0,
-        done_count: totalDoneCount,
-        total_count: totalItemsCount,
-        note: note.trim(),
+      // Lưu chi tiết từng mẫu đã làm vào bộ nhớ máy
+      submittedTemplates.forEach((st, idx) => {
+        saveLocalSubmission({
+          id: res?.submissions?.[idx]?.id || Date.now() + idx,
+          room_name: data.room.name,
+          department_name: data.room.department_name,
+          template_name: st.template_name,
+          qr_code: qrCode,
+          performer_name: trimmedName,
+          work_date: new Date().toISOString().slice(0, 10),
+          server_time: new Date().toISOString(),
+          date_display: fullResult.date_display,
+          time_display: fullResult.time_display,
+          is_complete: st.is_complete,
+          done_count: st.done_count,
+          total_count: st.total_count,
+          note: note.trim(),
+        });
       });
 
       setSuccessResult(fullResult);
@@ -562,16 +581,48 @@ export default function FillPage() {
             </div>
 
             <div className="detail-row column">
-              <span className="label">Các mẫu form đã báo cáo ({successResult.templates?.length || 0} mẫu):</span>
-              <div className="cert-templates-summary">
+              <span className="label">Kết quả kiểm tra chi tiết ({successResult.templates?.length || 0} mẫu):</span>
+              <div className="cert-templates-summary" style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '6px' }}>
                 {successResult.templates?.map((t) => (
-                  <div key={t.id || t.template_id} className="cert-tpl-badge">
-                    <strong>{t.template_name}</strong>
-                    <span className={`status-pill ${t.is_complete ? 'ok' : 'missing'}`}>
-                      {t.is_complete
-                        ? `✓ Đủ ${t.done_count}/${t.total_count} mục`
-                        : `Thiếu ${t.total_count - t.done_count} mục`}
-                    </span>
+                  <div
+                    key={t.id || t.template_id}
+                    className="cert-tpl-badge"
+                    style={{
+                      display: 'block',
+                      padding: '14px',
+                      background: '#f8fafc',
+                      border: '1.5px solid #e2e8f0',
+                      borderRadius: '10px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                      <strong style={{ fontSize: '1rem', color: '#0f172a' }}>{t.template_name}</strong>
+                      <span className={`status-pill ${t.is_complete ? 'ok' : 'missing'}`}>
+                        {t.is_complete
+                          ? `✓ Đủ ${t.done_count}/${t.total_count} mục`
+                          : `Thiếu ${t.total_count - t.done_count} mục`}
+                      </span>
+                    </div>
+                    {Array.isArray(t.items) && t.items.length > 0 && (
+                      <div style={{ display: 'grid', gap: '6px' }}>
+                        {t.items.map((it) => (
+                          <div
+                            key={it.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              fontSize: '0.9rem',
+                              color: it.passed ? '#15803d' : '#b91c1c',
+                              fontWeight: it.passed ? '500' : 'bold',
+                            }}
+                          >
+                            <span style={{ fontSize: '1.05rem', lineHeight: '1' }}>{it.passed ? '✓' : '✗'}</span>
+                            <span>{it.content}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -595,9 +646,6 @@ export default function FillPage() {
               </div>
             )}
           </div>
-
-          {/* Bảng theo dõi checklist giấy của viện */}
-          <PaperChecklistTable newEntry={successResult} />
 
           <div className="cert-actions">
             <button

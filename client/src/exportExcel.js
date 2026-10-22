@@ -6,70 +6,54 @@ import * as XLSX from 'xlsx';
 export function exportSingleSubmissionExcel(submission, roomData) {
   const wb = XLSX.utils.book_new();
 
-  // Bảng kiểm tra theo mẫu thực tế của bệnh viện
-  const headers = [
-    'THỜI GIAN THỰC HIỆN',
-    'KHOA',
-    'PHÒNG',
-    'BIỂU MẪU',
-    'VỆ SINH BÀN LẤY MÁU, GIƯỜNG, PHÒNG',
-    'VỆ SINH MÁY, XE ĐIỆN TIM, MÁY TÍNH',
-    'KIỂM TRA ĐẦY ĐỦ DỤNG CỤ PHÒNG',
-    'THAY KHAY DỤNG CỤ LẤY MÁU',
-    'CỒN XỊT SÁT KHUẨN',
-    'SẮP XẾP PHÒNG GỌN GÀNG, SẠCH SẼ',
-    'KÝ TÊN',
-    'GHI CHÚ',
-  ];
-
-  const timeStr = `${submission.time_display || '07:15'} ${submission.date_display || '22/10/2026'}`;
-  const deptStr = roomData?.room?.department_name || 'Khoa khám bệnh';
-  const roomStr = roomData?.room?.name || 'Phòng Lấy máu, Điện tim';
+  const deptStr = roomData?.room?.department_name || submission.department_name || 'Khoa khám bệnh';
+  const roomStr = roomData?.room?.name || submission.room_name || 'Phòng Lấy máu, Điện tim';
   const signer = submission.performer_name || 'Người thực hiện';
-
-  // Dòng của biên bản vừa làm
-  const currentRow = [
-    timeStr,
-    deptStr,
-    roomStr,
-    'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY PHÒNG LẤY MÁU, ĐIỆN TIM',
-    'ĐẠT ✓',
-    'ĐẠT ✓',
-    'ĐẠT ✓',
-    'ĐẠT ✓',
-    'ĐẠT ✓',
-    'ĐẠT ✓',
-    signer,
-    submission.note || '',
-  ];
+  const timeStr = `${submission.time_display || ''} ${submission.date_display || ''}`.trim();
 
   const data = [
     ['BỆNH VIỆN QUỐC TẾ CHẤN THƯƠNG CHỈNH HÌNH SÀI GÒN - SAIGON ITO'],
-    ['KHOA KHÁM BỆNH — BẢNG THEO DÕI CHECKLIST HẰNG NGÀY'],
+    ['BIÊN BẢN KIỂM TRA CHECKLIST ĐIỆN TỬ'],
     [],
-    headers,
-    currentRow,
+    ['Khoa / Phòng:', `${deptStr} — ${roomStr}`],
+    ['Người thực hiện:', signer],
+    ['Thời gian thực hiện:', timeStr],
+    ['Ghi chú:', submission.note || 'Không có'],
+    [],
   ];
+
+  const templates = submission.templates || [];
+  if (templates.length > 0) {
+    templates.forEach((tpl, tIdx) => {
+      data.push([`MẪU ${tIdx + 1}: ${tpl.template_name || 'BẢNG KIỂM TRA CHECKLIST'}`]);
+      data.push(['STT', 'Nội dung tiêu chí kiểm tra', 'Đánh giá']);
+      if (Array.isArray(tpl.items) && tpl.items.length > 0) {
+        tpl.items.forEach((it, iIdx) => {
+          data.push([iIdx + 1, it.content, it.passed ? 'ĐẠT ✓' : 'CHƯA ĐẠT ✗']);
+        });
+      } else {
+        data.push(['1', 'Kiểm tra đầy đủ tiêu chuẩn quy định', tpl.is_complete ? 'ĐẠT ✓' : 'CHƯA ĐẠT ✗']);
+      }
+      data.push([]);
+    });
+  } else {
+    data.push(['STT', 'Tiêu chí kiểm tra', 'Đánh giá']);
+    data.push(['1', 'Vệ sinh bàn lấy máu, giường, phòng', 'ĐẠT ✓']);
+    data.push(['2', 'Vệ sinh máy, xe điện tim, máy tính', 'ĐẠT ✓']);
+    data.push(['3', 'Kiểm tra đầy đủ dụng cụ phòng', 'ĐẠT ✓']);
+    data.push(['4', 'Thay khay dụng cụ lấy máu', 'ĐẠT ✓']);
+    data.push(['5', 'Cồn xịt sát khuẩn', 'ĐẠT ✓']);
+    data.push(['6', 'Sắp xếp phòng gọn gàng, sạch sẽ', 'ĐẠT ✓']);
+  }
 
   const ws = XLSX.utils.aoa_to_sheet(data);
-
-  // Đặt độ rộng các cột
   ws['!cols'] = [
-    { wch: 22 }, // Thời gian
-    { wch: 18 }, // Khoa
-    { wch: 24 }, // Phòng
-    { wch: 35 }, // Mẫu
-    { wch: 20 }, // Tiêu chí 1
-    { wch: 20 }, // Tiêu chí 2
-    { wch: 20 }, // Tiêu chí 3
-    { wch: 20 }, // Tiêu chí 4
-    { wch: 16 }, // Tiêu chí 5
-    { wch: 20 }, // Tiêu chí 6
-    { wch: 16 }, // Ký tên
-    { wch: 25 }, // Ghi chú
+    { wch: 10 }, // STT
+    { wch: 55 }, // Nội dung
+    { wch: 22 }, // Đánh giá
   ];
 
-  XLSX.utils.book_append_sheet(wb, ws, 'So_Theo_Doi_Checklist');
+  XLSX.utils.book_append_sheet(wb, ws, 'Bien_Ban_Checklist');
 
   const cleanName = signer.replace(/\s+/g, '_');
   const dateStr = (submission.date_display || '2026-10-22').replace(/\//g, '-');

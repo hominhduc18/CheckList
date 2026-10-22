@@ -350,18 +350,21 @@ export async function getFilterMeta() {
 }
 
 export async function getSubmissions(params) {
+  let serverItems = [];
   try {
     const qs = new URLSearchParams();
     Object.entries(params || {}).forEach(([k, v]) => {
       if (v !== undefined && v !== null && v !== '') qs.set(k, v);
     });
     const res = await safeFetchJson(`/api/submissions?${qs}`);
-    if (res && Array.isArray(res.items)) return res;
+    if (res && Array.isArray(res.items)) {
+      serverItems = res.items;
+    }
   } catch {
     /* fallback to local */
   }
 
-  // CHỈ DÙNG BẢN GHI THỰC TẾ ĐƯỢC NGƯỜI DÙNG / NHÂN VIÊN GỬI
+  // Dữ liệu thực tế lưu trên máy (localStorage)
   const local = getLocalSubmissions().map((s) => ({
     id: s.id,
     department_name: s.department_name || 'Khoa Khám bệnh',
@@ -381,8 +384,16 @@ export async function getSubmissions(params) {
     photo_path: s.photo_path || '',
   }));
 
+  // Hợp nhất server và local: đảm bảo mọi biên bản gửi đều hiển thị đầy đủ
+  const combined = [...serverItems];
+  for (const loc of local) {
+    if (!combined.some((srv) => String(srv.id) === String(loc.id) || (srv.server_time === loc.server_time && srv.performer_name === loc.performer_name))) {
+      combined.push(loc);
+    }
+  }
+
   const { from, to, department, room_id, template_id, status, q } = params || {};
-  let filtered = local;
+  let filtered = combined;
 
   if (from) {
     filtered = filtered.filter((item) => (item.work_date || item.date_display) >= from);
@@ -481,84 +492,98 @@ export const admin = {
     safeFetchJson(`/api/admin/submissions/${id}/hide`, { method: 'POST', json: { reason } }),
 };
 
+function calculateLocalStats(from, to) {
+  const local = getLocalSubmissions();
+  const filtered = local.filter((s) => {
+    const d = s.work_date || (s.date_display ? s.date_display.split('/').reverse().join('-') : '');
+    if (from && d && d < from) return false;
+    if (to && d && d > to) return false;
+    return true;
+  });
+
+  const total = filtered.length;
+  const complete = filtered.filter((s) => s.is_complete !== false).length;
+
+  const deptMap = {};
+  filtered.forEach((s) => {
+    const name = s.department_name || 'Khoa Khám bệnh';
+    if (!deptMap[name]) deptMap[name] = { name, total: 0, complete: 0 };
+    deptMap[name].total += 1;
+    if (s.is_complete !== false) deptMap[name].complete += 1;
+  });
+  const by_department = Object.values(deptMap).map((d) => ({
+    ...d,
+    rate: d.total ? Math.round((d.complete / d.total) * 100) : 0,
+  }));
+
+  const roomMap = {};
+  filtered.forEach((s) => {
+    const name = s.room_name || 'Phòng Lấy máu, Điện tim';
+    if (!roomMap[name]) roomMap[name] = { name, total: 0, complete: 0 };
+    roomMap[name].total += 1;
+    if (s.is_complete !== false) roomMap[name].complete += 1;
+  });
+  const by_room = Object.values(roomMap).map((r) => ({
+    ...r,
+    rate: r.total ? Math.round((r.complete / r.total) * 100) : 0,
+  }));
+
+  const personMap = {};
+  filtered.forEach((s) => {
+    const name = s.performer_name || 'Người thực hiện';
+    if (!personMap[name]) personMap[name] = { name, total: 0, complete: 0 };
+    personMap[name].total += 1;
+    if (s.is_complete !== false) personMap[name].complete += 1;
+  });
+  const by_person = Object.values(personMap);
+
+  return {
+    total_submissions: total,
+    complete,
+    by_department,
+    by_room,
+    by_person,
+    missed_most: [],
+  };
+}
+
+function calculateLocalCalendar(room_id, month) {
+  const local = getLocalSubmissions();
+  const monthPrefix = month;
+  const daysMap = {};
+  local.forEach((s) => {
+    const d = s.work_date || (s.date_display ? s.date_display.split('/').reverse().join('-') : '');
+    if (d && d.startsWith(monthPrefix)) {
+      daysMap[d] = {
+        date: d,
+        has_submission: true,
+        complete: s.is_complete !== false,
+      };
+    }
+  });
+  return {
+    room: { id: room_id, name: 'Phòng Lấy máu, Điện tim' },
+    month,
+    days: Object.values(daysMap),
+  };
+}
+
 export const stats = {
   overview: (from, to) =>
-    safeFetchJson(`/api/stats/overview?from=${from}&to=${to}`).catch(() => {
-      const local = getLocalSubmissions();
-      const filtered = local.filter((s) => {
-        const d = s.work_date || (s.date_display ? s.date_display.split('/').reverse().join('-') : '');
-        if (from && d && d < from) return false;
-        if (to && d && d > to) return false;
-        return true;
-      });
-
-      const total = filtered.length;
-      const complete = filtered.filter((s) => s.is_complete !== false).length;
-
-      const deptMap = {};
-      filtered.forEach((s) => {
-        const name = s.department_name || 'Khoa Khám bệnh';
-        if (!deptMap[name]) deptMap[name] = { name, total: 0, complete: 0 };
-        deptMap[name].total += 1;
-        if (s.is_complete !== false) deptMap[name].complete += 1;
-      });
-      const by_department = Object.values(deptMap).map((d) => ({
-        ...d,
-        rate: d.total ? Math.round((d.complete / d.total) * 100) : 0,
-      }));
-
-      const roomMap = {};
-      filtered.forEach((s) => {
-        const name = s.room_name || 'Phòng Lấy máu, Điện tim';
-        if (!roomMap[name]) roomMap[name] = { name, total: 0, complete: 0 };
-        roomMap[name].total += 1;
-        if (s.is_complete !== false) roomMap[name].complete += 1;
-      });
-      const by_room = Object.values(roomMap).map((r) => ({
-        ...r,
-        rate: r.total ? Math.round((r.complete / r.total) * 100) : 0,
-      }));
-
-      const personMap = {};
-      filtered.forEach((s) => {
-        const name = s.performer_name || 'Người thực hiện';
-        if (!personMap[name]) personMap[name] = { name, total: 0, complete: 0 };
-        personMap[name].total += 1;
-        if (s.is_complete !== false) personMap[name].complete += 1;
-      });
-      const by_person = Object.values(personMap);
-
-      return {
-        total_submissions: total,
-        complete,
-        by_department,
-        by_room,
-        by_person,
-        missed_most: [],
-      };
-    }),
+    safeFetchJson(`/api/stats/overview?from=${from}&to=${to}`)
+      .then((res) => {
+        if (res && res.total_submissions > 0) return res;
+        return calculateLocalStats(from, to);
+      })
+      .catch(() => calculateLocalStats(from, to)),
 
   calendar: (room_id, month) =>
-    safeFetchJson(`/api/stats/calendar?room_id=${room_id}&month=${encodeURIComponent(month)}`).catch(() => {
-      const local = getLocalSubmissions();
-      const monthPrefix = month;
-      const daysMap = {};
-      local.forEach((s) => {
-        const d = s.work_date || (s.date_display ? s.date_display.split('/').reverse().join('-') : '');
-        if (d && d.startsWith(monthPrefix)) {
-          daysMap[d] = {
-            date: d,
-            has_submission: true,
-            complete: s.is_complete !== false,
-          };
-        }
-      });
-      return {
-        room: { id: room_id, name: 'Phòng Lấy máu, Điện tim' },
-        month,
-        days: Object.values(daysMap),
-      };
-    }),
+    safeFetchJson(`/api/stats/calendar?room_id=${room_id}&month=${encodeURIComponent(month)}`)
+      .then((res) => {
+        if (res && res.days && res.days.length > 0) return res;
+        return calculateLocalCalendar(room_id, month);
+      })
+      .catch(() => calculateLocalCalendar(room_id, month)),
 
   reminders: () => safeFetchJson('/api/stats/reminders').catch(() => []),
   backup: () => safeFetchJson('/api/stats/backup', { method: 'POST', json: {} }),
