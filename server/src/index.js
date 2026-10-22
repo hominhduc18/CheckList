@@ -37,20 +37,25 @@ app.get('*', (req, res, next) => {
   });
 });
 
-const server = app.listen(PORT, () => {
-  console.log(`Server http://localhost:${PORT}`);
-  console.log(`DB: ${path.join(dataDir, 'checklist.db')}`);
-  startScheduler();
-});
+export { app };
+export default app;
 
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(
-      `Cổng ${PORT} đang bị chiếm. Đóng tiến trình cũ rồi chạy lại:\n` +
-        `  netstat -ano | findstr :${PORT}\n` +
-        `  taskkill /PID <pid> /F`
-    );
-    process.exit(1);
-  }
-  throw err;
-});
+if (!process.env.VERCEL && !process.env.NOW_REGION) {
+  const server = app.listen(PORT, () => {
+    console.log(`Server http://localhost:${PORT}`);
+    console.log(`DB: ${path.join(dataDir, 'checklist.db')}`);
+    startScheduler();
+  });
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(
+        `Cổng ${PORT} đang bị chiếm. Đóng tiến trình cũ rồi chạy lại:\n` +
+          `  netstat -ano | findstr :${PORT}\n` +
+          `  taskkill /PID <pid> /F`
+      );
+      process.exit(1);
+    }
+    throw err;
+  });
+}

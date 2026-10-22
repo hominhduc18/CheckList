@@ -2,21 +2,56 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import bcrypt from 'bcryptjs';
+import { nanoid } from 'nanoid';
 
+const isVercel = Boolean(process.env.VERCEL || process.env.NOW_REGION);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dataDir = path.join(__dirname, '..', 'data');
+const sourceDataDir = path.join(__dirname, '..', 'data');
+const dataDir = isVercel ? '/tmp/checklist-data' : sourceDataDir;
 const uploadDir = path.join(dataDir, 'uploads');
 const reportDir = path.join(dataDir, 'reports');
 const backupDir = path.join(dataDir, 'backups');
 
 for (const dir of [dataDir, uploadDir, reportDir, backupDir]) {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  if (!fs.existsSync(dir)) {
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 const dbPath = path.join(dataDir, 'checklist.db');
+
+// Nếu chạy trên Vercel, sao chép checklist.db ban đầu sang /tmp (nếu có)
+if (isVercel && !fs.existsSync(dbPath)) {
+  const sourceDb = path.join(sourceDataDir, 'checklist.db');
+  if (fs.existsSync(sourceDb)) {
+    try {
+      fs.copyFileSync(sourceDb, dbPath);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 export const db = new Database(dbPath);
 
-db.pragma('journal_mode = WAL');
+if (isVercel) {
+  try {
+    db.pragma('journal_mode = MEMORY');
+  } catch {
+    /* ignore */
+  }
+} else {
+  try {
+    db.pragma('journal_mode = WAL');
+  } catch {
+    /* ignore */
+  }
+}
 db.pragma('foreign_keys = ON');
 
 /** Khởi tạo bảng nếu chưa có */
@@ -151,6 +186,82 @@ export function initSchema() {
      ON CONFLICT(key) DO NOTHING`
   );
   for (const [k, v] of Object.entries(defaults)) upsert.run(k, v);
+
+  // Tự động seed tài khoản admin và khoa phòng nếu database mới (như trên Vercel /tmp)
+  try {
+    const adminExists = db.prepare(`SELECT id FROM managers WHERE role = 'admin' LIMIT 1`).get();
+    if (!adminExists) {
+      db.prepare(
+        `INSERT INTO managers (email, password_hash, full_name, role, department_ids)
+         VALUES (?, ?, ?, 'admin', '[]')`
+      ).run('admin@bv.local', bcrypt.hashSync('Admin@123', 10), 'Quản trị hệ thống');
+    }
+
+    const deptCount = db.prepare('SELECT COUNT(*) AS c FROM departments').get().c;
+    if (deptCount === 0) {
+      const deptId = db.prepare('INSERT INTO departments (name) VALUES (?)').run('Khoa Khám bệnh').lastInsertRowid;
+      const qrCode = nanoid(16);
+      db.prepare('INSERT INTO rooms (department_id, name, qr_code) VALUES (?, ?, ?)').run(deptId, 'Phòng khám 01', qrCode);
+
+      db.prepare(
+        `INSERT INTO managers (email, password_hash, full_name, role, department_ids)
+         VALUES (?, ?, ?, 'manager', ?)`
+      ).run('khoa.kham@bv.local', bcrypt.hashSync('Manager@123', 10), 'Quản lý Khoa Khám', JSON.stringify([deptId]));
+    }
+  } catch (e) {
+    console.warn('auto-seed note:', e.message);
+  }
+
+  // Đảm bảo các phòng có nhiều mẫu form đa dạng để người dùng lựa chọn
+  try {
+    const roomsList = db.prepare(`SELECT id, name FROM rooms WHERE is_visible = 1`).all();
+    for (const r of roomsList) {
+      const tplCount = db.prepare(`SELECT COUNT(*) AS c FROM templates WHERE room_id = ? AND is_visible = 1`).get(r.id).c;
+      if (tplCount <= 1) {
+        // Đổi tên mẫu đầu tiên (nếu là 'Checklist hằng ngày')
+        const firstTpl = db.prepare(`SELECT id, name FROM templates WHERE room_id = ? LIMIT 1`).get(r.id);
+        if (firstTpl && firstTpl.name === 'Checklist hằng ngày') {
+          db.prepare(`UPDATE templates SET name = 'Bảng kiểm Vệ sinh & Buồng phòng' WHERE id = ?`).run(firstTpl.id);
+        }
+
+        const insertTpl = db.prepare(
+          `INSERT INTO templates (room_id, name, shift, allow_photo, sort_order) VALUES (?, ?, 'ca_ngay', 1, ?)`
+        );
+        const insertItem = db.prepare(
+          `INSERT INTO template_items (template_id, content, sort_order) VALUES (?, ?, ?)`
+        );
+
+        // Mẫu 2: Trang thiết bị & Máy móc
+        const tpl2 = insertTpl.run(r.id, 'Bảng kiểm Trang thiết bị & Máy móc', 1).lastInsertRowid;
+        const items2 = [
+          'Kiểm tra hoạt động máy móc, dây cắm, thiết bị y tế',
+          'Kiểm tra máy tính, kết nối mạng nội bộ và máy in phiếu',
+          'Kiểm tra nguồn điện dự phòng (UPS) và dây nối an toàn',
+          'Kiểm tra nhiệt độ phòng và máy điều hòa hoạt động tốt',
+        ];
+        items2.forEach((content, i) => insertItem.run(tpl2, content, i));
+
+        // Mẫu 3: Vật tư y tế & Hộp cấp cứu
+        const tpl3 = insertTpl.run(r.id, 'Bảng kiểm Vật tư y tế & Hộp cấp cứu', 2).lastInsertRowid;
+        const items3 = [
+          'Kiểm tra cơ số bông, cồn sát khuẩn, gạc, dây garo',
+          'Kiểm tra kim tiêm, ống nghiệm chân không còn hạn sử dụng',
+          'Kiểm tra hộp chống sốc phản vệ đầy đủ thuốc và hạn dùng',
+          'Kiểm tra thùng rác y tế đúng màu phân loại (vàng, đen, trắng)',
+        ];
+        items3.forEach((content, i) => insertItem.run(tpl3, content, i));
+      }
+    }
+
+    // Đổi tên phòng 'Lấy máu, điện tim' thành 'Phòng khám 01'
+    db.prepare(`UPDATE rooms SET name = 'Phòng khám 01' WHERE name = 'Lấy máu, điện tim'`).run();
+    db.prepare(`UPDATE template_items SET content = replace(content, 'bàn lấy máu, ', 'bàn khám, ') WHERE content LIKE '%bàn lấy máu%'`).run();
+    db.prepare(`UPDATE template_items SET content = replace(content, 'xe điện tim, ', '') WHERE content LIKE '%xe điện tim%'`).run();
+    db.prepare(`UPDATE template_items SET content = replace(content, 'lấy máu', 'khám / thủ thuật') WHERE content LIKE '%lấy máu%'`).run();
+    db.prepare(`UPDATE template_items SET content = replace(content, 'máy đo điện tim', 'máy móc thiết bị') WHERE content LIKE '%máy đo điện tim%'`).run();
+  } catch (e) {
+    console.warn('ensure multi templates note:', e.message);
+  }
 }
 
 export function getSetting(key, fallback = '') {

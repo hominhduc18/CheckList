@@ -47,6 +47,16 @@ export async function getRoomByQr(qrCode) {
   return res.json();
 }
 
+export async function getRoomTodayStatus(qrCode) {
+  try {
+    const res = await fetch(`/api/rooms/${encodeURIComponent(qrCode)}/today-status`);
+    if (!res.ok) return { submissions: [] };
+    return res.json();
+  } catch {
+    return { submissions: [] };
+  }
+}
+
 export async function getNameSuggestions(roomId, q = '') {
   const url = `/api/rooms/${roomId}/name-suggestions?q=${encodeURIComponent(q)}`;
   const res = await fetch(url);
@@ -65,6 +75,37 @@ export async function submitChecklist(formData) {
   const res = await fetch('/api/submissions', { method: 'POST', body: formData });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
+}
+
+export async function submitBatchChecklist(formData) {
+  const res = await fetch('/api/submissions/batch', { method: 'POST', body: formData });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+const RECENT_SUBMISSIONS_KEY = 'cl_recent_submissions';
+
+export function saveLocalSubmission(sub) {
+  try {
+    const list = getLocalSubmissions();
+    const updated = [sub, ...list.filter((x) => x.id !== sub.id)].slice(0, 20);
+    localStorage.setItem(RECENT_SUBMISSIONS_KEY, JSON.stringify(updated));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function getLocalSubmissions() {
+  try {
+    const raw = localStorage.getItem(RECENT_SUBMISSIONS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function clearLocalSubmissions() {
+  localStorage.removeItem(RECENT_SUBMISSIONS_KEY);
 }
 
 export async function getFilterMeta() {

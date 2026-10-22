@@ -14,6 +14,7 @@ import {
 } from './time.js';
 import { buildChecklistWorkbook, exportFileName } from './excel.js';
 import { requireAuth, allowedDepartmentNames } from './auth.js';
+import { makeQrPng, roomUrl } from './qr.js';
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -118,6 +119,63 @@ router.get('/rooms/:qrCode', (req, res) => {
   });
 });
 
+/** GET /api/rooms/:qrCode/today-status — các bản ghi hôm nay của phòng để nhân viên xem */
+router.get('/rooms/:qrCode/today-status', (req, res) => {
+  const room = db
+    .prepare(
+      `SELECT r.id, r.name, d.name AS department_name
+       FROM rooms r JOIN departments d ON d.id = r.department_id
+       WHERE r.qr_code = ? AND r.is_visible = 1 AND d.is_visible = 1`
+    )
+    .get(req.params.qrCode);
+  if (!room) return res.status(404).json({ error: 'Không tìm thấy phòng' });
+
+  const server = nowVN();
+  const rows = db
+    .prepare(
+      `SELECT id, performer_name, server_time, shift, is_supplement,
+              items_snapshot, tick_results, note
+       FROM submissions
+       WHERE room_id = ? AND work_date = ? AND is_hidden = 0
+       ORDER BY server_time DESC`
+    )
+    .all(room.id, server.date);
+
+  const enriched = rows.map((r) => enrichSubmission(r));
+  res.json({
+    room_id: room.id,
+    work_date: server.date,
+    submissions: enriched.map((s) => ({
+      id: s.id,
+      performer_name: s.performer_name,
+      server_time: s.server_time,
+      time_display: s.time_display,
+      shift: s.shift,
+      is_supplement: !!s.is_supplement,
+      done_count: s.done_count,
+      total_count: s.total_count,
+      is_complete: s.is_complete,
+      note: s.note,
+    })),
+  });
+});
+
+/** GET /api/rooms/:qrCode/qr.png — lấy ảnh mã QR của phòng trực tiếp để test */
+router.get('/rooms/:qrCode/qr.png', async (req, res) => {
+  try {
+    const room = db
+      .prepare('SELECT qr_code FROM rooms WHERE qr_code = ? AND is_visible = 1')
+      .get(req.params.qrCode);
+    if (!room) return res.status(404).send('Không tìm thấy phòng');
+    const png = await makeQrPng(room.qr_code, 450);
+    res.setHeader('Content-Type', 'image/png');
+    res.send(png);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Lỗi tạo mã QR');
+  }
+});
+
 /** GET /api/rooms/:qrCode/names — gợi ý tên đã dùng */
 router.get('/rooms/:roomId/name-suggestions', (req, res) => {
   const roomId = Number(req.params.roomId);
@@ -188,18 +246,18 @@ router.post('/submissions', upload.single('photo'), (req, res) => {
       return res.status(400).json({ error: 'Tên quá dài.' });
     }
 
-    // Chống gửi quá nhanh theo thiết bị (tối thiểu 8 giây)
+    // Chống gửi quá nhanh cho cùng mẫu trên thiết bị (tối thiểu 3 giây)
     if (deviceId) {
       const recent = db
         .prepare(
-          `SELECT created_at FROM submissions
-           WHERE device_id = ?
+          `SELECT created_at, template_id FROM submissions
+           WHERE device_id = ? AND template_id = ?
            ORDER BY id DESC LIMIT 1`
         )
-        .get(deviceId);
+        .get(deviceId, templateId);
       if (recent) {
         const last = new Date(recent.created_at + 'Z').getTime();
-        if (Date.now() - last < 8000) {
+        if (Date.now() - last < 3000) {
           return res.status(429).json({
             error: 'Gửi quá nhanh. Vui lòng đợi vài giây rồi thử lại.',
           });
@@ -322,6 +380,148 @@ router.post('/submissions', upload.single('photo'), (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message || 'Lỗi máy chủ' });
+  }
+});
+
+/** POST /api/submissions/batch — gửi đồng thời nhiều mẫu checklist */
+router.post('/submissions/batch', upload.single('photo'), (req, res) => {
+  try {
+    const body = req.body;
+    const roomId = Number(body.room_id);
+    const performer = String(body.performer_name || '').trim();
+    const note = String(body.note || '').trim();
+    const deviceId = String(body.device_id || '').slice(0, 64);
+    const clientTime = body.client_time || null;
+    let templatesData = [];
+
+    try {
+      templatesData = JSON.parse(body.templates_data || '[]');
+    } catch {
+      return res.status(400).json({ error: 'Dữ liệu mẫu không hợp lệ.' });
+    }
+
+    if (!Array.isArray(templatesData) || templatesData.length === 0) {
+      return res.status(400).json({ error: 'Chưa chọn mẫu nào để báo cáo.' });
+    }
+    if (!performer || performer.length < 2) {
+      return res.status(400).json({ error: 'Vui lòng nhập tên người thực hiện (ít nhất 2 ký tự).' });
+    }
+
+    const room = db
+      .prepare(
+        `SELECT r.*, d.name AS department_name
+         FROM rooms r JOIN departments d ON d.id = r.department_id
+         WHERE r.id = ? AND r.is_visible = 1`
+      )
+      .get(roomId);
+    if (!room) return res.status(404).json({ error: 'Phòng không hợp lệ.' });
+
+    const server = nowVN();
+    const photoPath = req.file ? `uploads/${req.file.filename}` : null;
+
+    const runBatch = db.transaction(() => {
+      const results = [];
+
+      for (const item of templatesData) {
+        const templateId = Number(item.template_id);
+        const isSupplement = item.is_supplement === true || item.is_supplement === '1';
+
+        const tpl = db
+          .prepare(`SELECT * FROM templates WHERE id = ? AND room_id = ? AND is_visible = 1`)
+          .get(templateId, roomId);
+        if (!tpl) continue;
+
+        const tplItems = db
+          .prepare(
+            `SELECT id, content, sort_order FROM template_items WHERE template_id = ? ORDER BY sort_order, id`
+          )
+          .all(templateId);
+
+        const ticks = item.tick_results || {};
+        const cleanTicks = {};
+        for (const it of tplItems) {
+          cleanTicks[String(it.id)] = ticks[String(it.id)] === true;
+        }
+
+        const missing = tplItems.filter((it) => !cleanTicks[String(it.id)]);
+        if (missing.length > 0 && !note) {
+          throw new Error(`Mẫu "${tpl.name}" còn ${missing.length} mục chưa tick — vui lòng ghi lý do vào ô Ghi chú.`);
+        }
+
+        let shift = detectShift(server.hour);
+        if (tpl.shift === 'sang' || tpl.shift === 'chieu') {
+          shift = tpl.shift;
+        }
+
+        const itemsSnapshot = tplItems.map((it) => ({
+          id: it.id,
+          content: it.content,
+          sort_order: it.sort_order,
+        }));
+
+        const ins = db
+          .prepare(
+            `INSERT INTO submissions (
+              department_name, room_name, room_id, template_id, template_name,
+              performer_name, server_time, client_time, work_date, shift,
+              items_snapshot, tick_results, note, photo_path,
+              is_supplement, device_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+          .run(
+            room.department_name,
+            room.name,
+            room.id,
+            tpl.id,
+            tpl.name,
+            performer,
+            server.isoLocal,
+            clientTime,
+            server.date,
+            shift,
+            JSON.stringify(itemsSnapshot),
+            JSON.stringify(cleanTicks),
+            note,
+            photoPath,
+            isSupplement ? 1 : 0,
+            deviceId || null
+          );
+
+        db.prepare(
+          `INSERT INTO name_suggestions (room_id, name, last_used, use_count)
+           VALUES (?, ?, ?, 1)
+           ON CONFLICT(room_id, name) DO UPDATE SET
+             last_used = excluded.last_used,
+             use_count = use_count + 1`
+        ).run(room.id, performer, server.isoLocal);
+
+        const done = tplItems.length - missing.length;
+        results.push({
+          id: ins.lastInsertRowid,
+          template_id: tpl.id,
+          template_name: tpl.name,
+          done_count: done,
+          total_count: tplItems.length,
+          is_complete: missing.length === 0,
+          is_supplement: isSupplement,
+          server_time: server.isoLocal,
+          time_display: formatTimeVN(server.isoLocal),
+          date_display: formatDateVN(server.date),
+        });
+      }
+
+      return results;
+    });
+
+    const results = runBatch();
+    res.status(201).json({
+      success: true,
+      performer_name: performer,
+      submissions: results,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(400).json({ error: err.message || 'Lỗi gửi dữ liệu' });
   }
 });
 
@@ -510,13 +710,14 @@ router.get('/export/excel', requireAuth, async (req, res) => {
   }
 });
 
-/** GET /api/rooms-list — danh sách phòng + mã QR (tạm cho giai đoạn 1) */
+/** GET /api/rooms-list — danh sách phòng + mã QR */
 router.get('/rooms-list', (_req, res) => {
   const rows = db
     .prepare(
-      `SELECT r.id, r.name, r.qr_code, d.name AS department_name
+      `SELECT r.id, r.name, r.qr_code, r.department_id, d.name AS department_name
        FROM rooms r JOIN departments d ON d.id = r.department_id
-       WHERE r.is_visible = 1`
+       WHERE r.is_visible = 1 AND d.is_visible = 1
+       ORDER BY d.name ASC, r.name ASC`
     )
     .all();
   res.json(rows);

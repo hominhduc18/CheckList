@@ -38,15 +38,15 @@ const insertItem = db.prepare(
 const run = db.transaction(() => {
   const deptId = insertDept.run('Khoa Khám bệnh').lastInsertRowid;
   const qrCode = nanoid(16);
-  const roomId = insertRoom.run(deptId, 'Lấy máu, điện tim', qrCode).lastInsertRowid;
+  const roomId = insertRoom.run(deptId, 'Phòng khám 01', qrCode).lastInsertRowid;
 
-  const tplId = insertTpl.run(roomId, 'Checklist hằng ngày', 'ca_ngay', 1, 0).lastInsertRowid;
+  const tplId = insertTpl.run(roomId, 'Bảng kiểm Vệ sinh & Buồng phòng', 'ca_ngay', 1, 0).lastInsertRowid;
 
   const items = [
-    'Vệ sinh bàn lấy máu, giường, phòng',
-    'Vệ sinh máy, xe điện tim, máy tính',
+    'Vệ sinh bàn khám, giường khám, phòng',
+    'Vệ sinh máy móc, thiết bị, máy tính',
     'Kiểm tra đầy đủ dụng cụ phòng',
-    'Thay khay dụng cụ lấy máu',
+    'Thay khay dụng cụ khám / thủ thuật',
     'Cồn xịt sát khuẩn',
     'Sắp xếp phòng gọn gàng, sạch sẽ',
   ];
@@ -68,7 +68,7 @@ const run = db.transaction(() => {
 
 const { qrCode } = run();
 console.log('Seed OK.');
-console.log('Khoa: Khoa Khám bệnh | Phòng: Lấy máu, điện tim');
+console.log('Khoa: Khoa Khám bệnh | Phòng: Phòng khám 01');
 console.log(`Mã phòng (QR): ${qrCode}`);
 console.log(`Form: http://localhost:5173/r/${qrCode}`);
 console.log('Admin: admin@bv.local / Admin@123');

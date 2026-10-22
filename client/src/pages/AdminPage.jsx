@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { admin, downloadAuth } from '../api.js';
 import { useAuth } from '../auth.jsx';
+import QrViewModal from '../components/QrViewModal.jsx';
 
 export default function AdminPage() {
   const { isAdmin } = useAuth();
@@ -12,6 +13,7 @@ export default function AdminPage() {
   const [managers, setManagers] = useState([]);
   const [audit, setAudit] = useState([]);
   const [settings, setSettings] = useState({});
+  const [viewingQrRoom, setViewingQrRoom] = useState(null);
 
   const [deptName, setDeptName] = useState('');
   const [roomForm, setRoomForm] = useState({ name: '', department_id: '' });
@@ -193,6 +195,14 @@ export default function AdminPage() {
                 </strong>
                 <div className="mono">{r.fill_url}</div>
                 <div className="row-actions">
+                  <button
+                    type="button"
+                    className="btn primary"
+                    onClick={() => setViewingQrRoom({ ...r, qr_code: r.qr_code || r.fill_url?.split('/r/')?.[1] })}
+                    style={{ background: '#0b5cab', color: '#fff', fontWeight: '700' }}
+                  >
+                    👁 Xem QR
+                  </button>
                   <button
                     type="button"
                     className="btn ghost"
@@ -552,6 +562,12 @@ export default function AdminPage() {
           </ul>
         </section>
       )}
+
+      {/* Modal hiển thị mã QR trực tiếp trên màn hình */}
+      <QrViewModal
+        room={viewingQrRoom}
+        onClose={() => setViewingQrRoom(null)}
+      />
     </div>
   );
 }
