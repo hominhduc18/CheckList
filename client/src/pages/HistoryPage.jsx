@@ -27,7 +27,7 @@ export default function HistoryPage() {
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [from, setFrom] = useState(todayISO());
+  const [from, setFrom] = useState(monthStartISO());
   const [to, setTo] = useState(todayISO());
   const [department, setDepartment] = useState('');
   const [roomId, setRoomId] = useState('');

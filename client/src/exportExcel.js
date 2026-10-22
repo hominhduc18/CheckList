@@ -43,21 +43,12 @@ export function exportSingleSubmissionExcel(submission, roomData) {
     submission.note || '',
   ];
 
-  // Các dòng lịch sử mẫu từ sổ theo dõi của viện trong ảnh
-  const historyRows = [
-    ['7:15 17.10.26', deptStr, roomStr, 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY', 'ĐẠT ✓', 'ĐẠT ✓', 'ĐẠT ✓', 'ĐẠT ✓', 'ĐẠT ✓', 'ĐẠT ✓', 'Trinh M', ''],
-    ['7:15 19.10.26', deptStr, roomStr, 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY', 'ĐẠT ✓', 'ĐẠT ✓', 'ĐẠT ✓', 'ĐẠT ✓', 'ĐẠT ✓', 'ĐẠT ✓', 'Trinh M', ''],
-    ['7:00 20.10.26', deptStr, roomStr, 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY', 'ĐẠT ✓', 'ĐẠT ✓', 'ĐẠT ✓', 'ĐẠT ✓', 'ĐẠT ✓', 'ĐẠT ✓', 'Trinh', ''],
-    ['7:00 21.10.26', deptStr, roomStr, 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY', 'ĐẠT ✓', 'ĐẠT ✓', 'ĐẠT ✓', 'ĐẠT ✓', 'ĐẠT ✓', 'ĐẠT ✓', 'Vân', ''],
-  ];
-
   const data = [
     ['BỆNH VIỆN QUỐC TẾ CHẤN THƯƠNG CHỈNH HÌNH SÀI GÒN - SAIGON ITO'],
     ['KHOA KHÁM BỆNH — BẢNG THEO DÕI CHECKLIST HẰNG NGÀY'],
     [],
     headers,
     currentRow,
-    ...historyRows,
   ];
 
   const ws = XLSX.utils.aoa_to_sheet(data);

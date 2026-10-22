@@ -1,16 +1,26 @@
+import { getLocalSubmissions } from '../api.js';
+
 export default function PaperChecklistTable({ newEntry, extraLogs = [] }) {
-  // Dữ liệu mẫu thực tế từ ảnh chụp của khoa
-  const baseLogs = [
-    { time: '7:15 17.10.26', v1: true, v2: true, v3: true, v4: true, v5: true, v6: true, signer: 'Trinh M' },
-    { time: '7:15 19.10.26', v1: true, v2: true, v3: true, v4: true, v5: true, v6: true, signer: 'Trinh M' },
-    { time: '7:00 20.10.26', v1: true, v2: true, v3: true, v4: true, v5: true, v6: true, signer: 'Trinh' },
-    { time: '7:00 21.10.26', v1: true, v2: true, v3: true, v4: true, v5: true, v6: true, signer: 'Vân' },
-  ];
+  // Lấy các bản ghi thực tế từ bộ nhớ máy (loại bỏ mọi dữ liệu test cũ)
+  const localList = getLocalSubmissions()
+    .filter((s) => !String(s.id).startsWith('demo-'))
+    .slice(0, 10)
+    .map((s) => ({
+      time: `${s.time_display || ''} ${s.date_display || ''}`.trim(),
+      v1: true,
+      v2: true,
+      v3: true,
+      v4: true,
+      v5: true,
+      v6: true,
+      signer: s.performer_name || 'Đã ký',
+      isNew: false,
+    }));
 
   const currentEntry = newEntry
     ? [
         {
-          time: `${newEntry.time_display || '7:15'} ${newEntry.date_display || '22.10.26'}`,
+          time: `${newEntry.time_display || '07:15'} ${newEntry.date_display || '22/10/2026'}`.trim(),
           v1: true,
           v2: true,
           v3: true,
@@ -23,7 +33,17 @@ export default function PaperChecklistTable({ newEntry, extraLogs = [] }) {
       ]
     : [];
 
-  const allLogs = [...currentEntry, ...extraLogs, ...baseLogs];
+  // Ghép các bản ghi thực tế, không bị lặp
+  const allLogs = [...currentEntry, ...extraLogs];
+  localList.forEach((log) => {
+    if (log.time && !allLogs.some((x) => x.time === log.time && x.signer === log.signer)) {
+      allLogs.push(log);
+    }
+  });
+
+  // Số dòng trống bổ sung để bảng đẹp và chuẩn sổ giấy
+  const blankRowsCount = Math.max(0, 4 - allLogs.length);
+  const blankRows = Array.from({ length: blankRowsCount });
 
   return (
     <div
@@ -103,7 +123,7 @@ export default function PaperChecklistTable({ newEntry, extraLogs = [] }) {
           <tbody>
             {allLogs.map((row, idx) => (
               <tr
-                key={idx}
+                key={`log-${idx}`}
                 style={{
                   background: row.isNew ? '#ecfdf5' : idx % 2 === 0 ? '#ffffff' : '#fcfcfd',
                   height: '36px',
@@ -142,6 +162,18 @@ export default function PaperChecklistTable({ newEntry, extraLogs = [] }) {
                 >
                   {row.signer}
                 </td>
+              </tr>
+            ))}
+            {blankRows.map((_, bIdx) => (
+              <tr key={`blank-${bIdx}`} style={{ height: '34px', background: '#fafafa' }}>
+                <td style={{ border: '1px solid #cbd5e1', color: '#94a3b8', fontSize: '0.8rem' }}>---</td>
+                <td style={{ border: '1px solid #cbd5e1', color: '#cbd5e1' }}></td>
+                <td style={{ border: '1px solid #cbd5e1', color: '#cbd5e1' }}></td>
+                <td style={{ border: '1px solid #cbd5e1', color: '#cbd5e1' }}></td>
+                <td style={{ border: '1px solid #cbd5e1', color: '#cbd5e1' }}></td>
+                <td style={{ border: '1px solid #cbd5e1', color: '#cbd5e1' }}></td>
+                <td style={{ border: '1px solid #cbd5e1', color: '#cbd5e1' }}></td>
+                <td style={{ border: '1px solid #cbd5e1', color: '#cbd5e1' }}></td>
               </tr>
             ))}
           </tbody>

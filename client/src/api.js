@@ -180,9 +180,17 @@ export async function getNameSuggestions(roomId, q = '') {
   try {
     return await safeFetchJson(`/api/rooms/${roomId}/name-suggestions?q=${encodeURIComponent(q)}`);
   } catch {
+    const list = [];
     const remembered = getRememberedName();
-    const list = ['ĐD. Nguyễn Văn A', 'ĐD. Trần Thị B', 'BS. Lê Hoàng C'];
-    if (remembered && !list.includes(remembered)) list.unshift(remembered);
+    if (remembered) list.push(remembered);
+
+    const local = getLocalSubmissions();
+    local.forEach((s) => {
+      if (s.performer_name && !list.includes(s.performer_name)) {
+        list.push(s.performer_name);
+      }
+    });
+
     return q ? list.filter((n) => n.toLowerCase().includes(q.toLowerCase())) : list;
   }
 }
@@ -209,15 +217,19 @@ export async function submitChecklist(formData) {
         performer_name: performer,
         work_date: now.toISOString().slice(0, 10),
         shift: 'ca_ngay',
-        room_name: 'Phòng kiểm tra (Demo)',
+        room_name: 'Phòng Lấy máu, Điện tim',
         department_name: 'Khoa Khám bệnh',
-        template_name: 'Biên bản kiểm tra',
+        template_name: 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY PHÒNG LẤY MÁU, ĐIỆN TIM',
         server_time: now.toISOString(),
         time_display: now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
         date_display: now.toLocaleDateString('vi-VN'),
         all_pass: true,
+        is_complete: true,
         fail_count: 0,
-        total_count: 5,
+        done_count: 6,
+        total_count: 6,
+        missing_items: [],
+        note: formData.get('note') || '',
       };
       saveLocalSubmission(mockSub);
       return { success: true, submission: mockSub };
@@ -234,26 +246,62 @@ export async function submitBatchChecklist(formData) {
       const performer = formData.get('performer_name') || 'Người thực hiện';
       rememberName(performer);
       const now = new Date();
-      const mockSub = {
-        id: Date.now(),
-        performer_name: performer,
-        work_date: now.toISOString().slice(0, 10),
-        shift: 'ca_ngay',
-        room_name: 'Phòng kiểm tra (Demo)',
-        department_name: 'Khoa Khám bệnh',
-        template_name: 'Biên bản kiểm tra đa mẫu',
-        server_time: now.toISOString(),
-        time_display: now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
-        date_display: now.toLocaleDateString('vi-VN'),
-        all_pass: true,
-        fail_count: 0,
-        total_count: 5,
-      };
-      saveLocalSubmission(mockSub);
+      let tpls = [];
+      try {
+        tpls = JSON.parse(formData.get('templates_data') || '[]');
+      } catch {}
+
+      const submissions = tpls.map((t, idx) => {
+        const tickKeys = Object.keys(t.tick_results || {});
+        const passCount = Object.values(t.tick_results || {}).filter(Boolean).length;
+        const total = tickKeys.length || 6;
+        return {
+          id: Date.now() + idx,
+          template_id: t.template_id,
+          template_name: t.template_name || 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY PHÒNG LẤY MÁU, ĐIỆN TIM',
+          performer_name: performer,
+          work_date: now.toISOString().slice(0, 10),
+          shift: 'ca_ngay',
+          room_name: 'Phòng Lấy máu, Điện tim',
+          department_name: 'Khoa Khám bệnh',
+          server_time: now.toISOString(),
+          time_display: now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+          date_display: now.toLocaleDateString('vi-VN'),
+          all_pass: passCount === total,
+          is_complete: passCount === total,
+          done_count: passCount,
+          total_count: total,
+          missing_items: [],
+          note: formData.get('note') || '',
+        };
+      });
+
+      if (submissions.length === 0) {
+        submissions.push({
+          id: Date.now(),
+          performer_name: performer,
+          work_date: now.toISOString().slice(0, 10),
+          shift: 'ca_ngay',
+          room_name: 'Phòng Lấy máu, Điện tim',
+          department_name: 'Khoa Khám bệnh',
+          template_name: 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY PHÒNG LẤY MÁU, ĐIỆN TIM',
+          server_time: now.toISOString(),
+          time_display: now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+          date_display: now.toLocaleDateString('vi-VN'),
+          all_pass: true,
+          is_complete: true,
+          done_count: 6,
+          total_count: 6,
+          missing_items: [],
+          note: formData.get('note') || '',
+        });
+      }
+
+      submissions.forEach((sub) => saveLocalSubmission(sub));
       return {
         success: true,
-        count: 1,
-        submissions: [mockSub],
+        count: submissions.length,
+        submissions,
       };
     }
     throw err;
@@ -265,7 +313,7 @@ const RECENT_SUBMISSIONS_KEY = 'cl_recent_submissions';
 export function saveLocalSubmission(sub) {
   try {
     const list = getLocalSubmissions();
-    const updated = [sub, ...list.filter((x) => x.id !== sub.id)].slice(0, 20);
+    const updated = [sub, ...list.filter((x) => x.id !== sub.id)].slice(0, 100);
     localStorage.setItem(RECENT_SUBMISSIONS_KEY, JSON.stringify(updated));
   } catch {
     /* ignore */
@@ -275,7 +323,9 @@ export function saveLocalSubmission(sub) {
 export function getLocalSubmissions() {
   try {
     const raw = localStorage.getItem(RECENT_SUBMISSIONS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const parsed = raw ? JSON.parse(raw) : [];
+    // Loại bỏ mọi dữ liệu demo/test cũ nếu có
+    return parsed.filter((item) => item && !String(item.id).startsWith('demo-'));
   } catch {
     return [];
   }
@@ -308,102 +358,59 @@ export async function getSubmissions(params) {
     const res = await safeFetchJson(`/api/submissions?${qs}`);
     if (res && Array.isArray(res.items)) return res;
   } catch {
-    /* fallback to local + demo */
+    /* fallback to local */
   }
 
-  const demoSheetLogs = [
-    {
-      id: 'demo-1',
-      department_name: 'Khoa Khám bệnh',
-      room_name: 'Phòng Lấy máu, Điện tim',
-      template_name: 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY PHÒNG LẤY MÁU, ĐIỆN TIM',
-      performer_name: 'Trinh M',
-      work_date: '2026-10-17',
-      shift: 'ca_ngay',
-      server_time: '2026-10-17T07:15:00',
-      time_display: '07:15',
-      date_display: '17/10/2026',
-      done_count: 6,
-      total_count: 6,
-      is_complete: true,
-      missing_items: [],
-      note: '',
-    },
-    {
-      id: 'demo-2',
-      department_name: 'Khoa Khám bệnh',
-      room_name: 'Phòng Lấy máu, Điện tim',
-      template_name: 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY PHÒNG LẤY MÁU, ĐIỆN TIM',
-      performer_name: 'Trinh M',
-      work_date: '2026-10-19',
-      shift: 'ca_ngay',
-      server_time: '2026-10-19T07:15:00',
-      time_display: '07:15',
-      date_display: '19/10/2026',
-      done_count: 6,
-      total_count: 6,
-      is_complete: true,
-      missing_items: [],
-      note: '',
-    },
-    {
-      id: 'demo-3',
-      department_name: 'Khoa Khám bệnh',
-      room_name: 'Phòng Lấy máu, Điện tim',
-      template_name: 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY PHÒNG LẤY MÁU, ĐIỆN TIM',
-      performer_name: 'Trinh',
-      work_date: '2026-10-20',
-      shift: 'ca_ngay',
-      server_time: '2026-10-20T07:00:00',
-      time_display: '07:00',
-      date_display: '20/10/2026',
-      done_count: 6,
-      total_count: 6,
-      is_complete: true,
-      missing_items: [],
-      note: '',
-    },
-    {
-      id: 'demo-4',
-      department_name: 'Khoa Khám bệnh',
-      room_name: 'Phòng Lấy máu, Điện tim',
-      template_name: 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY PHÒNG LẤY MÁU, ĐIỆN TIM',
-      performer_name: 'Vân',
-      work_date: '2026-10-21',
-      shift: 'ca_ngay',
-      server_time: '2026-10-21T07:00:00',
-      time_display: '07:00',
-      date_display: '21/10/2026',
-      done_count: 6,
-      total_count: 6,
-      is_complete: true,
-      missing_items: [],
-      note: '',
-    },
-  ];
-
+  // CHỈ DÙNG BẢN GHI THỰC TẾ ĐƯỢC NGƯỜI DÙNG / NHÂN VIÊN GỬI
   const local = getLocalSubmissions().map((s) => ({
     id: s.id,
     department_name: s.department_name || 'Khoa Khám bệnh',
     room_name: s.room_name || 'Phòng Lấy máu, Điện tim',
     template_name: s.template_name || 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY PHÒNG LẤY MÁU, ĐIỆN TIM',
-    performer_name: s.performer_name || 'Điều dưỡng',
-    work_date: s.work_date || new Date().toISOString().slice(0, 10),
+    performer_name: s.performer_name || 'Người thực hiện',
+    work_date: s.work_date || (s.date_display ? s.date_display.split('/').reverse().join('-') : new Date().toISOString().slice(0, 10)),
     shift: s.shift || 'ca_ngay',
     server_time: s.server_time || new Date().toISOString(),
     time_display: s.time_display || '07:15',
-    date_display: s.date_display || '22/10/2026',
-    done_count: s.done_count || 6,
-    total_count: s.total_count || 6,
-    is_complete: s.all_pass !== false,
-    missing_items: [],
+    date_display: s.date_display || new Date().toLocaleDateString('vi-VN'),
+    done_count: s.done_count !== undefined ? s.done_count : 6,
+    total_count: s.total_count !== undefined ? s.total_count : 6,
+    is_complete: s.is_complete !== undefined ? s.is_complete : s.all_pass !== false,
+    missing_items: s.missing_items || [],
     note: s.note || '',
+    photo_path: s.photo_path || '',
   }));
 
-  const allItems = [...local, ...demoSheetLogs];
+  const { from, to, department, room_id, template_id, status, q } = params || {};
+  let filtered = local;
+
+  if (from) {
+    filtered = filtered.filter((item) => (item.work_date || item.date_display) >= from);
+  }
+  if (to) {
+    filtered = filtered.filter((item) => (item.work_date || item.date_display) <= to);
+  }
+  if (department) {
+    filtered = filtered.filter((item) => item.department_name === department);
+  }
+  if (status === 'du') {
+    filtered = filtered.filter((item) => item.is_complete);
+  } else if (status === 'thieu') {
+    filtered = filtered.filter((item) => !item.is_complete);
+  }
+  if (q && q.trim()) {
+    const kw = q.trim().toLowerCase();
+    filtered = filtered.filter(
+      (item) =>
+        item.performer_name.toLowerCase().includes(kw) ||
+        item.note.toLowerCase().includes(kw) ||
+        item.room_name.toLowerCase().includes(kw)
+    );
+  }
+
   return {
-    count: allItems.length,
-    items: allItems,
+    count: filtered.length,
+    items: filtered,
   };
 }
 
@@ -476,38 +483,83 @@ export const admin = {
 
 export const stats = {
   overview: (from, to) =>
-    safeFetchJson(`/api/stats/overview?from=${from}&to=${to}`).catch(() => ({
-      total_submissions: 18,
-      complete: 18,
-      by_department: [
-        { name: 'Khoa Khám bệnh', total: 14, complete: 14, rate: 100 },
-        { name: 'Khoa Cấp cứu', total: 4, complete: 4, rate: 100 },
-      ],
-      by_room: [
-        { name: 'Phòng Lấy máu, Điện tim', total: 10, complete: 10, rate: 100 },
-        { name: 'Khoa Khám bệnh', total: 4, complete: 4, rate: 100 },
-        { name: 'Khoa Cấp cứu', total: 4, complete: 4, rate: 100 },
-      ],
-      by_person: [
-        { name: 'Trinh M', total: 6, complete: 6 },
-        { name: 'Trinh', total: 4, complete: 4 },
-        { name: 'Vân', total: 4, complete: 4 },
-        { name: 'ĐD. Nguyễn Văn A', total: 4, complete: 4 },
-      ],
-      missed_most: [],
-    })),
+    safeFetchJson(`/api/stats/overview?from=${from}&to=${to}`).catch(() => {
+      const local = getLocalSubmissions();
+      const filtered = local.filter((s) => {
+        const d = s.work_date || (s.date_display ? s.date_display.split('/').reverse().join('-') : '');
+        if (from && d && d < from) return false;
+        if (to && d && d > to) return false;
+        return true;
+      });
+
+      const total = filtered.length;
+      const complete = filtered.filter((s) => s.is_complete !== false).length;
+
+      const deptMap = {};
+      filtered.forEach((s) => {
+        const name = s.department_name || 'Khoa Khám bệnh';
+        if (!deptMap[name]) deptMap[name] = { name, total: 0, complete: 0 };
+        deptMap[name].total += 1;
+        if (s.is_complete !== false) deptMap[name].complete += 1;
+      });
+      const by_department = Object.values(deptMap).map((d) => ({
+        ...d,
+        rate: d.total ? Math.round((d.complete / d.total) * 100) : 0,
+      }));
+
+      const roomMap = {};
+      filtered.forEach((s) => {
+        const name = s.room_name || 'Phòng Lấy máu, Điện tim';
+        if (!roomMap[name]) roomMap[name] = { name, total: 0, complete: 0 };
+        roomMap[name].total += 1;
+        if (s.is_complete !== false) roomMap[name].complete += 1;
+      });
+      const by_room = Object.values(roomMap).map((r) => ({
+        ...r,
+        rate: r.total ? Math.round((r.complete / r.total) * 100) : 0,
+      }));
+
+      const personMap = {};
+      filtered.forEach((s) => {
+        const name = s.performer_name || 'Người thực hiện';
+        if (!personMap[name]) personMap[name] = { name, total: 0, complete: 0 };
+        personMap[name].total += 1;
+        if (s.is_complete !== false) personMap[name].complete += 1;
+      });
+      const by_person = Object.values(personMap);
+
+      return {
+        total_submissions: total,
+        complete,
+        by_department,
+        by_room,
+        by_person,
+        missed_most: [],
+      };
+    }),
+
   calendar: (room_id, month) =>
-    safeFetchJson(`/api/stats/calendar?room_id=${room_id}&month=${encodeURIComponent(month)}`).catch(() => ({
-      room: { id: room_id, name: 'Phòng Lấy máu, Điện tim' },
-      month,
-      days: [
-        { date: `${month}-17`, has_submission: true, complete: true },
-        { date: `${month}-19`, has_submission: true, complete: true },
-        { date: `${month}-20`, has_submission: true, complete: true },
-        { date: `${month}-21`, has_submission: true, complete: true },
-        { date: `${month}-22`, has_submission: true, complete: true },
-      ],
-    })),
+    safeFetchJson(`/api/stats/calendar?room_id=${room_id}&month=${encodeURIComponent(month)}`).catch(() => {
+      const local = getLocalSubmissions();
+      const monthPrefix = month;
+      const daysMap = {};
+      local.forEach((s) => {
+        const d = s.work_date || (s.date_display ? s.date_display.split('/').reverse().join('-') : '');
+        if (d && d.startsWith(monthPrefix)) {
+          daysMap[d] = {
+            date: d,
+            has_submission: true,
+            complete: s.is_complete !== false,
+          };
+        }
+      });
+      return {
+        room: { id: room_id, name: 'Phòng Lấy máu, Điện tim' },
+        month,
+        days: Object.values(daysMap),
+      };
+    }),
+
   reminders: () => safeFetchJson('/api/stats/reminders').catch(() => []),
   backup: () => safeFetchJson('/api/stats/backup', { method: 'POST', json: {} }),
 };

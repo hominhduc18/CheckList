@@ -420,9 +420,13 @@ export default function FillPage() {
         saveLocalSubmission({
           id: `off_${Date.now()}`,
           ...offlineResult,
+          template_name: activeTemplates[0]?.name || 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY PHÒNG LẤY MÁU, ĐIỆN TIM',
+          work_date: new Date().toISOString().slice(0, 10),
+          server_time: new Date().toISOString(),
           is_complete: missingItemsCount === 0,
           done_count: totalDoneCount,
           total_count: totalItemsCount,
+          note: note.trim(),
         });
         setSuccessResult(offlineResult);
         return;
@@ -459,13 +463,17 @@ export default function FillPage() {
         id: res.submissions?.[0]?.id || Date.now(),
         room_name: data.room.name,
         department_name: data.room.department_name,
+        template_name: activeTemplates[0]?.name || 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY PHÒNG LẤY MÁU, ĐIỆN TIM',
         qr_code: qrCode,
         performer_name: trimmedName,
+        work_date: new Date().toISOString().slice(0, 10),
+        server_time: new Date().toISOString(),
         date_display: fullResult.date_display,
         time_display: fullResult.time_display,
         is_complete: missingItemsCount === 0,
         done_count: totalDoneCount,
         total_count: totalItemsCount,
+        note: note.trim(),
       });
 
       setSuccessResult(fullResult);
