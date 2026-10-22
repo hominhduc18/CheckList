@@ -13,7 +13,7 @@ import {
   formatTimeVN,
 } from './time.js';
 import { buildChecklistWorkbook, exportFileName } from './excel.js';
-import { requireAuth, allowedDepartmentNames } from './auth.js';
+import { requireAuth, optionalAuth, allowedDepartmentNames } from './auth.js';
 import { makeQrPng, roomUrl } from './qr.js';
 
 const upload = multer({
@@ -584,7 +584,7 @@ function querySubmissions(filters) {
 }
 
 /** GET /api/meta/filters — danh sách khoa/phòng/mẫu để lọc */
-router.get('/meta/filters', requireAuth, (req, res) => {
+router.get('/meta/filters', optionalAuth, (req, res) => {
   const allowed = allowedDepartmentNames(req.user);
   let departments = db
     .prepare(
@@ -619,8 +619,8 @@ router.get('/meta/filters', requireAuth, (req, res) => {
   res.json({ departments, rooms, templates });
 });
 
-/** GET /api/submissions — lịch sử (cần đăng nhập) */
-router.get('/submissions', requireAuth, (req, res) => {
+/** GET /api/submissions — lịch sử */
+router.get('/submissions', optionalAuth, (req, res) => {
   const filters = {
     from: req.query.from,
     to: req.query.to,
@@ -657,7 +657,7 @@ router.get('/submissions', requireAuth, (req, res) => {
 });
 
 /** GET /api/export/excel — xuất .xlsx theo bộ lọc */
-router.get('/export/excel', requireAuth, async (req, res) => {
+router.get('/export/excel', optionalAuth, async (req, res) => {
   try {
     let from = req.query.from;
     let to = req.query.to;

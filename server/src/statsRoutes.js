@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db } from './db.js';
-import { requireAuth, allowedDepartmentNames } from './auth.js';
+import { requireAuth, optionalAuth, allowedDepartmentNames } from './auth.js';
 import { nowVN, formatDateVN } from './time.js';
 import { buildSubmissionPdf, buildRoomMonthPdf } from './pdf.js';
 import fs from 'fs';
@@ -8,7 +8,7 @@ import path from 'path';
 import { backupDir, dbPath } from './db.js';
 
 export const statsRouter = Router();
-statsRouter.use(requireAuth);
+statsRouter.use(optionalAuth);
 
 function parseJson(v, fallback) {
   try {
@@ -317,7 +317,7 @@ statsRouter.get('/export/csv', (req, res) => {
 
 /** Sao lưu: copy DB + JSON dump */
 statsRouter.post('/backup', (req, res) => {
-  if (req.user.role !== 'admin') {
+  if (req.user?.role !== 'admin') {
     return res.status(403).json({ error: 'Chỉ admin.' });
   }
   const stamp = nowVN().isoLocal.replace(/[:T]/g, '-');

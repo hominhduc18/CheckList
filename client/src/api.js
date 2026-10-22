@@ -287,13 +287,16 @@ export function clearLocalSubmissions() {
 
 export async function getFilterMeta() {
   try {
-    return await safeFetchJson('/api/meta/filters');
+    const res = await safeFetchJson('/api/meta/filters');
+    if (res && res.departments) return res;
   } catch {
-    return {
-      departments: [{ id: 1, name: 'Khoa Khám bệnh' }, { id: 2, name: 'Khoa Cấp cứu' }],
-      templates: MOCK_TEMPLATES.map((t) => ({ id: t.id, name: t.name })),
-    };
+    /* fallback */
   }
+  return {
+    departments: ['Khoa Khám bệnh', 'Khoa Cấp cứu', 'Khoa Chẩn đoán hình ảnh', 'Khoa Ngoại'],
+    rooms: MOCK_ROOMS.map((r) => ({ id: r.id, name: r.name, department_name: r.department_name })),
+    templates: MOCK_TEMPLATES.map((t) => ({ id: t.id, name: t.name, department_name: 'Khoa Khám bệnh' })),
+  };
 }
 
 export async function getSubmissions(params) {
@@ -302,15 +305,106 @@ export async function getSubmissions(params) {
     Object.entries(params || {}).forEach(([k, v]) => {
       if (v !== undefined && v !== null && v !== '') qs.set(k, v);
     });
-    return await safeFetchJson(`/api/submissions?${qs}`);
+    const res = await safeFetchJson(`/api/submissions?${qs}`);
+    if (res && Array.isArray(res.items)) return res;
   } catch {
-    return {
-      rows: getLocalSubmissions(),
-      total: getLocalSubmissions().length,
-      page: 1,
-      totalPages: 1,
-    };
+    /* fallback to local + demo */
   }
+
+  const demoSheetLogs = [
+    {
+      id: 'demo-1',
+      department_name: 'Khoa Khám bệnh',
+      room_name: 'Phòng Lấy máu, Điện tim',
+      template_name: 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY PHÒNG LẤY MÁU, ĐIỆN TIM',
+      performer_name: 'Trinh M',
+      work_date: '2026-10-17',
+      shift: 'ca_ngay',
+      server_time: '2026-10-17T07:15:00',
+      time_display: '07:15',
+      date_display: '17/10/2026',
+      done_count: 6,
+      total_count: 6,
+      is_complete: true,
+      missing_items: [],
+      note: '',
+    },
+    {
+      id: 'demo-2',
+      department_name: 'Khoa Khám bệnh',
+      room_name: 'Phòng Lấy máu, Điện tim',
+      template_name: 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY PHÒNG LẤY MÁU, ĐIỆN TIM',
+      performer_name: 'Trinh M',
+      work_date: '2026-10-19',
+      shift: 'ca_ngay',
+      server_time: '2026-10-19T07:15:00',
+      time_display: '07:15',
+      date_display: '19/10/2026',
+      done_count: 6,
+      total_count: 6,
+      is_complete: true,
+      missing_items: [],
+      note: '',
+    },
+    {
+      id: 'demo-3',
+      department_name: 'Khoa Khám bệnh',
+      room_name: 'Phòng Lấy máu, Điện tim',
+      template_name: 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY PHÒNG LẤY MÁU, ĐIỆN TIM',
+      performer_name: 'Trinh',
+      work_date: '2026-10-20',
+      shift: 'ca_ngay',
+      server_time: '2026-10-20T07:00:00',
+      time_display: '07:00',
+      date_display: '20/10/2026',
+      done_count: 6,
+      total_count: 6,
+      is_complete: true,
+      missing_items: [],
+      note: '',
+    },
+    {
+      id: 'demo-4',
+      department_name: 'Khoa Khám bệnh',
+      room_name: 'Phòng Lấy máu, Điện tim',
+      template_name: 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY PHÒNG LẤY MÁU, ĐIỆN TIM',
+      performer_name: 'Vân',
+      work_date: '2026-10-21',
+      shift: 'ca_ngay',
+      server_time: '2026-10-21T07:00:00',
+      time_display: '07:00',
+      date_display: '21/10/2026',
+      done_count: 6,
+      total_count: 6,
+      is_complete: true,
+      missing_items: [],
+      note: '',
+    },
+  ];
+
+  const local = getLocalSubmissions().map((s) => ({
+    id: s.id,
+    department_name: s.department_name || 'Khoa Khám bệnh',
+    room_name: s.room_name || 'Phòng Lấy máu, Điện tim',
+    template_name: s.template_name || 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY PHÒNG LẤY MÁU, ĐIỆN TIM',
+    performer_name: s.performer_name || 'Điều dưỡng',
+    work_date: s.work_date || new Date().toISOString().slice(0, 10),
+    shift: s.shift || 'ca_ngay',
+    server_time: s.server_time || new Date().toISOString(),
+    time_display: s.time_display || '07:15',
+    date_display: s.date_display || '22/10/2026',
+    done_count: s.done_count || 6,
+    total_count: s.total_count || 6,
+    is_complete: s.all_pass !== false,
+    missing_items: [],
+    note: s.note || '',
+  }));
+
+  const allItems = [...local, ...demoSheetLogs];
+  return {
+    count: allItems.length,
+    items: allItems,
+  };
 }
 
 export function excelQuery(params) {
@@ -383,12 +477,37 @@ export const admin = {
 export const stats = {
   overview: (from, to) =>
     safeFetchJson(`/api/stats/overview?from=${from}&to=${to}`).catch(() => ({
-      total: 0,
-      today: 0,
-      pass_rate: 100,
+      total_submissions: 18,
+      complete: 18,
+      by_department: [
+        { name: 'Khoa Khám bệnh', total: 14, complete: 14, rate: 100 },
+        { name: 'Khoa Cấp cứu', total: 4, complete: 4, rate: 100 },
+      ],
+      by_room: [
+        { name: 'Phòng Lấy máu, Điện tim', total: 10, complete: 10, rate: 100 },
+        { name: 'Khoa Khám bệnh', total: 4, complete: 4, rate: 100 },
+        { name: 'Khoa Cấp cứu', total: 4, complete: 4, rate: 100 },
+      ],
+      by_person: [
+        { name: 'Trinh M', total: 6, complete: 6 },
+        { name: 'Trinh', total: 4, complete: 4 },
+        { name: 'Vân', total: 4, complete: 4 },
+        { name: 'ĐD. Nguyễn Văn A', total: 4, complete: 4 },
+      ],
+      missed_most: [],
     })),
   calendar: (room_id, month) =>
-    safeFetchJson(`/api/stats/calendar?room_id=${room_id}&month=${encodeURIComponent(month)}`).catch(() => []),
+    safeFetchJson(`/api/stats/calendar?room_id=${room_id}&month=${encodeURIComponent(month)}`).catch(() => ({
+      room: { id: room_id, name: 'Phòng Lấy máu, Điện tim' },
+      month,
+      days: [
+        { date: `${month}-17`, has_submission: true, complete: true },
+        { date: `${month}-19`, has_submission: true, complete: true },
+        { date: `${month}-20`, has_submission: true, complete: true },
+        { date: `${month}-21`, has_submission: true, complete: true },
+        { date: `${month}-22`, has_submission: true, complete: true },
+      ],
+    })),
   reminders: () => safeFetchJson('/api/stats/reminders').catch(() => []),
   backup: () => safeFetchJson('/api/stats/backup', { method: 'POST', json: {} }),
 };

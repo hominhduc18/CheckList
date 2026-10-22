@@ -25,23 +25,9 @@ export default function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/r/:qrCode" element={<FillPage />} />
+          <Route path="/lich-su" element={<HistoryPage />} />
+          <Route path="/thong-ke" element={<StatsPage />} />
           <Route path="/dang-nhap" element={<LoginPage />} />
-          <Route
-            path="/lich-su"
-            element={
-              <Private>
-                <HistoryPage />
-              </Private>
-            }
-          />
-          <Route
-            path="/thong-ke"
-            element={
-              <Private>
-                <StatsPage />
-              </Private>
-            }
-          />
           <Route
             path="/quan-tri"
             element={
@@ -58,20 +44,20 @@ export default function App() {
           <NavLink to="/" end className={({ isActive }) => (isActive ? 'tab active' : 'tab')}>
             Trang chủ
           </NavLink>
+          <NavLink
+            to="/lich-su"
+            className={({ isActive }) => (isActive ? 'tab active' : 'tab')}
+          >
+            Lịch sử
+          </NavLink>
+          <NavLink
+            to="/thong-ke"
+            className={({ isActive }) => (isActive ? 'tab active' : 'tab')}
+          >
+            Thống kê
+          </NavLink>
           {isLoggedIn ? (
             <>
-              <NavLink
-                to="/lich-su"
-                className={({ isActive }) => (isActive ? 'tab active' : 'tab')}
-              >
-                Lịch sử
-              </NavLink>
-              <NavLink
-                to="/thong-ke"
-                className={({ isActive }) => (isActive ? 'tab active' : 'tab')}
-              >
-                Thống kê
-              </NavLink>
               <NavLink
                 to="/quan-tri"
                 className={({ isActive }) => (isActive ? 'tab active' : 'tab')}

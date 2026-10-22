@@ -58,6 +58,28 @@ export function requireAuth(req, res, next) {
   }
 }
 
+/** Middleware: không bắt buộc đăng nhập (nếu có token thì gán req.user) */
+export function optionalAuth(req, _res, next) {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!token) return next();
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+    const row = db
+      .prepare('SELECT id, is_active, role, department_ids, email, full_name FROM managers WHERE id = ?')
+      .get(req.user.id);
+    if (row && row.is_active) {
+      req.user.role = row.role;
+      req.user.email = row.email;
+      req.user.full_name = row.full_name;
+      req.user.department_ids = parseIds(row.department_ids);
+    }
+  } catch {
+    /* ignore */
+  }
+  next();
+}
+
 export function requireAdmin(req, res, next) {
   if (req.user?.role !== 'admin') {
     return res.status(403).json({ error: 'Chỉ admin được thực hiện.' });
