@@ -14,6 +14,7 @@ import {
 import { enqueueOffline, flushOfflineQueue, listOffline } from '../offline.js';
 import BrandHeader from '../BrandHeader.jsx';
 import PaperChecklistTable from '../components/PaperChecklistTable.jsx';
+import { exportSingleSubmissionExcel } from '../exportExcel.js';
 
 function compressImage(file, maxBytes = 5 * 1024 * 1024) {
   return new Promise((resolve, reject) => {
@@ -591,15 +592,38 @@ export default function FillPage() {
           <PaperChecklistTable newEntry={successResult} />
 
           <div className="cert-actions">
-            <button type="button" className="btn primary block" onClick={handleReset}>
-              ✓ Đã hoàn thành nhiệm vụ (hoặc làm tiếp mẫu khác)
+            <button
+              type="button"
+              className="btn block"
+              onClick={() => exportSingleSubmissionExcel(successResult, data)}
+              style={{
+                background: '#16a34a',
+                color: '#ffffff',
+                border: 'none',
+                fontWeight: 'bold',
+                fontSize: '1rem',
+                padding: '12px',
+                borderRadius: '10px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                boxShadow: '0 4px 12px rgba(22, 163, 74, 0.25)',
+                cursor: 'pointer',
+              }}
+            >
+              <span aria-hidden>📊</span>
+              <span>TẢI FILE EXCEL BIÊN BẢN NÀY (.XLSX)</span>
             </button>
             <button
               type="button"
-              className="btn btn-print-cert"
+              className="btn btn-print-cert block"
               onClick={() => window.print()}
             >
-              🖨 In / Lưu phiếu xác nhận
+              🖨 In / Lưu phiếu xác nhận (PDF)
+            </button>
+            <button type="button" className="btn primary block" onClick={handleReset}>
+              ✓ Đã hoàn thành nhiệm vụ (hoặc làm tiếp mẫu khác)
             </button>
           </div>
         </div>

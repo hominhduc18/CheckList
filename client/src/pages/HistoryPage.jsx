@@ -6,6 +6,7 @@ import {
   getFilterMeta,
   getSubmissions,
 } from '../api.js';
+import { exportSubmissionsListExcel } from '../exportExcel.js';
 import BrandHeader from '../BrandHeader.jsx';
 
 function todayISO() {
@@ -82,15 +83,10 @@ export default function HistoryPage() {
     }
   }
 
-  async function downloadExcel(preset) {
+  function downloadExcel(preset) {
     try {
-      const params = { ...filters() };
-      if (preset) {
-        params.preset = preset;
-        delete params.from;
-        delete params.to;
-      }
-      await downloadAuth(excelQuery(params), 'checklist.xlsx');
+      const filename = `Checklist_${preset || from + '_den_' + to}.xlsx`;
+      exportSubmissionsListExcel(items, filename);
     } catch (e) {
       setError(e.message);
     }
