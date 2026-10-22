@@ -40,13 +40,13 @@ const run = db.transaction(() => {
   const qrCode = nanoid(16);
   const roomId = insertRoom.run(deptId, 'Khoa Khám bệnh', qrCode).lastInsertRowid;
 
-  const tplId = insertTpl.run(roomId, 'Bảng kiểm Vệ sinh & Buồng phòng', 'ca_ngay', 1, 0).lastInsertRowid;
+  const tplId = insertTpl.run(roomId, 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY PHÒNG LẤY MÁU, ĐIỆN TIM', 'ca_ngay', 1, 0).lastInsertRowid;
 
   const items = [
-    'Vệ sinh bàn khám, giường khám, phòng',
-    'Vệ sinh máy móc, thiết bị, máy tính',
+    'Vệ sinh bàn lấy máu, giường, phòng',
+    'Vệ sinh máy, xe điện tim, máy tính',
     'Kiểm tra đầy đủ dụng cụ phòng',
-    'Thay khay dụng cụ khám / thủ thuật',
+    'Thay khay dụng cụ lấy máu',
     'Cồn xịt sát khuẩn',
     'Sắp xếp phòng gọn gàng, sạch sẽ',
   ];

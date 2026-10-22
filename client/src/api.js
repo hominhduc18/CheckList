@@ -53,16 +53,17 @@ const MOCK_ROOMS = [
 const MOCK_TEMPLATES = [
   {
     id: 101,
-    name: 'Bảng kiểm 5S đầu ca khám bệnh',
+    name: 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY PHÒNG LẤY MÁU, ĐIỆN TIM',
     shift: 'ca_ngay',
     allow_photo: true,
     sort_order: 1,
     items: [
-      { id: 1, content: 'Sàng lọc: Loại bỏ vật dụng không cần thiết trên bàn khám', sort_order: 0 },
-      { id: 2, content: 'Sắp xếp: Bàn khám, hồ sơ, máy tính ngăn nắp, dễ lấy', sort_order: 1 },
-      { id: 3, content: 'Sạch sẽ: Lau chùi bàn khám, giường khám, máy tính', sort_order: 2 },
-      { id: 4, content: 'Săn sóc: Khay dụng cụ khám / thủ thuật sạch, đầy đủ', sort_order: 3 },
-      { id: 5, content: 'Sẵn sàng: Cồn xịt sát khuẩn tay, găng tay y tế còn đầy đủ', sort_order: 4 },
+      { id: 1, content: 'Vệ sinh bàn lấy máu, giường, phòng', sort_order: 1 },
+      { id: 2, content: 'Vệ sinh máy, xe điện tim, máy tính', sort_order: 2 },
+      { id: 3, content: 'Kiểm tra đầy đủ dụng cụ phòng', sort_order: 3 },
+      { id: 4, content: 'Thay khay dụng cụ lấy máu', sort_order: 4 },
+      { id: 5, content: 'Cồn xịt sát khuẩn', sort_order: 5 },
+      { id: 6, content: 'Sắp xếp phòng gọn gàng, sạch sẽ', sort_order: 6 },
     ],
   },
   {

@@ -253,12 +253,22 @@ export function initSchema() {
       }
     }
 
-    // Đổi tên phòng 'Lấy máu, điện tim' hoặc 'Phòng khám 01' thành 'Khoa Khám bệnh'
-    db.prepare(`UPDATE rooms SET name = 'Khoa Khám bệnh' WHERE name IN ('Lấy máu, điện tim', 'Phòng khám 01')`).run();
-    db.prepare(`UPDATE template_items SET content = replace(content, 'bàn lấy máu, ', 'bàn khám, ') WHERE content LIKE '%bàn lấy máu%'`).run();
-    db.prepare(`UPDATE template_items SET content = replace(content, 'xe điện tim, ', '') WHERE content LIKE '%xe điện tim%'`).run();
-    db.prepare(`UPDATE template_items SET content = replace(content, 'lấy máu', 'khám / thủ thuật') WHERE content LIKE '%lấy máu%'`).run();
-    db.prepare(`UPDATE template_items SET content = replace(content, 'máy đo điện tim', 'máy móc thiết bị') WHERE content LIKE '%máy đo điện tim%'`).run();
+    // Đặt tên mẫu chính xác theo biểu mẫu bệnh viện thực tế
+    db.prepare(`UPDATE templates SET name = 'BẢNG KIỂM TRA CHECKLIST HẰNG NGÀY PHÒNG LẤY MÁU, ĐIỆN TIM' WHERE sort_order = 0 OR name LIKE '%Buồng phòng%' OR name LIKE '%Vệ sinh%'`).run();
+    const tpl1 = db.prepare(`SELECT id FROM templates ORDER BY sort_order ASC LIMIT 1`).get();
+    if (tpl1) {
+      db.prepare(`DELETE FROM template_items WHERE template_id = ?`).run(tpl1.id);
+      const exactItems = [
+        'Vệ sinh bàn lấy máu, giường, phòng',
+        'Vệ sinh máy, xe điện tim, máy tính',
+        'Kiểm tra đầy đủ dụng cụ phòng',
+        'Thay khay dụng cụ lấy máu',
+        'Cồn xịt sát khuẩn',
+        'Sắp xếp phòng gọn gàng, sạch sẽ',
+      ];
+      const insertItm = db.prepare(`INSERT INTO template_items (template_id, content, sort_order) VALUES (?, ?, ?)`);
+      exactItems.forEach((c, idx) => insertItm.run(tpl1.id, c, idx));
+    }
   } catch (e) {
     console.warn('ensure multi templates note:', e.message);
   }

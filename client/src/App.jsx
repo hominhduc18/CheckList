@@ -1,4 +1,4 @@
-import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
+import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
 import FillPage from './pages/FillPage.jsx';
 import HistoryPage from './pages/HistoryPage.jsx';
 import HomePage from './pages/HomePage.jsx';
@@ -16,6 +16,8 @@ function Private({ children, adminOnly = false }) {
 
 export default function App() {
   const { isLoggedIn, isAdmin, logout, user } = useAuth();
+  const location = useLocation();
+  const isScanPage = location.pathname.startsWith('/r/');
 
   return (
     <div className="app-shell">
@@ -51,49 +53,51 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
-      <nav className="tabbar" aria-label="Điều hướng chính">
-        <NavLink to="/" end className={({ isActive }) => (isActive ? 'tab active' : 'tab')}>
-          Trang chủ
-        </NavLink>
-        {isLoggedIn ? (
-          <>
-            <NavLink
-              to="/lich-su"
-              className={({ isActive }) => (isActive ? 'tab active' : 'tab')}
-            >
-              Lịch sử
-            </NavLink>
-            <NavLink
-              to="/thong-ke"
-              className={({ isActive }) => (isActive ? 'tab active' : 'tab')}
-            >
-              Thống kê
-            </NavLink>
-            <NavLink
-              to="/quan-tri"
-              className={({ isActive }) => (isActive ? 'tab active' : 'tab')}
-            >
-              {isAdmin ? 'Quản trị' : 'Phòng / QR'}
-            </NavLink>
-            <button
-              type="button"
-              className="tab"
-              onClick={logout}
-              title={user?.email}
-              style={{ border: 0, background: 'transparent', cursor: 'pointer' }}
-            >
-              Thoát
-            </button>
-          </>
-        ) : (
-          <NavLink
-            to="/dang-nhap"
-            className={({ isActive }) => (isActive ? 'tab active' : 'tab')}
-          >
-            Đăng nhập
+      {!isScanPage && (
+        <nav className="tabbar" aria-label="Điều hướng chính">
+          <NavLink to="/" end className={({ isActive }) => (isActive ? 'tab active' : 'tab')}>
+            Trang chủ
           </NavLink>
-        )}
-      </nav>
+          {isLoggedIn ? (
+            <>
+              <NavLink
+                to="/lich-su"
+                className={({ isActive }) => (isActive ? 'tab active' : 'tab')}
+              >
+                Lịch sử
+              </NavLink>
+              <NavLink
+                to="/thong-ke"
+                className={({ isActive }) => (isActive ? 'tab active' : 'tab')}
+              >
+                Thống kê
+              </NavLink>
+              <NavLink
+                to="/quan-tri"
+                className={({ isActive }) => (isActive ? 'tab active' : 'tab')}
+              >
+                {isAdmin ? 'Quản trị' : 'Phòng / QR'}
+              </NavLink>
+              <button
+                type="button"
+                className="tab"
+                onClick={logout}
+                title={user?.email}
+                style={{ border: 0, background: 'transparent', cursor: 'pointer' }}
+              >
+                Thoát
+              </button>
+            </>
+          ) : (
+            <NavLink
+              to="/dang-nhap"
+              className={({ isActive }) => (isActive ? 'tab active' : 'tab')}
+            >
+              Đăng nhập
+            </NavLink>
+          )}
+        </nav>
+      )}
     </div>
   );
 }

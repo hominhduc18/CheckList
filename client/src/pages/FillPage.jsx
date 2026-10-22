@@ -13,6 +13,7 @@ import {
 } from '../api.js';
 import { enqueueOffline, flushOfflineQueue, listOffline } from '../offline.js';
 import BrandHeader from '../BrandHeader.jsx';
+import PaperChecklistTable from '../components/PaperChecklistTable.jsx';
 
 function compressImage(file, maxBytes = 5 * 1024 * 1024) {
   return new Promise((resolve, reject) => {
@@ -155,6 +156,16 @@ export default function FillPage() {
       window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
     };
+  }, []);
+
+  // Khóa nhân viên quét QR không cho thoát về trang chủ
+  useEffect(() => {
+    window.history.pushState(null, '', window.location.href);
+    const onPopState = () => {
+      window.history.pushState(null, '', window.location.href);
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
   // Đồng hồ thời gian thực
@@ -496,9 +507,6 @@ export default function FillPage() {
             <button type="button" className="btn primary" onClick={load}>
               Thử tải lại
             </button>
-            <Link to="/" className="btn ghost">
-              ← Về trang chủ
-            </Link>
           </div>
         </div>
       </div>
@@ -579,16 +587,12 @@ export default function FillPage() {
             )}
           </div>
 
+          {/* Bảng theo dõi checklist giấy của viện */}
+          <PaperChecklistTable newEntry={successResult} />
+
           <div className="cert-actions">
             <button type="button" className="btn primary block" onClick={handleReset}>
-              Điền tiếp phòng này / Chọn form khác
-            </button>
-            <button
-              type="button"
-              className="btn ghost block"
-              onClick={() => navigate('/')}
-            >
-              ← Về trang chủ quét phòng khác
+              ✓ Đã hoàn thành nhiệm vụ (hoặc làm tiếp mẫu khác)
             </button>
             <button
               type="button"
@@ -618,9 +622,10 @@ export default function FillPage() {
       <div className="page fill-page">
         {/* Thanh điều hướng trên cùng */}
         <div className="fill-top-nav">
-          <Link to="/" className="btn-back-link" title="Quay lại trang chủ">
-            ← Trang chủ
-          </Link>
+          <div className="staff-lock-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', color: '#0b5cab', fontWeight: '700', padding: '4px 10px', background: '#e8f3fc', borderRadius: '8px' }}>
+            <span aria-hidden>🔒</span>
+            <span>Chế độ kiểm tra theo mã QR</span>
+          </div>
           <div className="network-status-indicator">
             <span className={`dot ${online ? 'online' : 'offline'}`} />
             <span>{online ? 'Trực tuyến' : 'Ngoại tuyến'}</span>
@@ -742,6 +747,9 @@ export default function FillPage() {
             )}
           </div>
         </section>
+
+        {/* Bảng theo dõi checklist giấy thực tế của viện */}
+        <PaperChecklistTable />
       </div>
     );
   }
